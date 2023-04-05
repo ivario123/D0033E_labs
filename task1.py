@@ -1,8 +1,10 @@
 import pandas
 import open3d as o3d
 import matplotlib
+import numpy as np
 from open3d import visualization
-
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 lookup = [
     "afternoon",
@@ -92,6 +94,9 @@ class Gesture:
         self.name = name
         self.joints = joints
         self.pcl = None
+        self.angles = []
+        self.coords = []
+        self.vecs = None
 
     def __str__(self) -> str:
         return f"""{self.name}
@@ -106,27 +111,38 @@ class Gesture:
         angles = []
         for joint in self.joints:
             positions.append(joint.xyz)
-            angles = []
-
+            angles.append(joint.ang)
+        self.angles = angles
         self.coords = positions
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(positions)
-        pcd.an
         self.pcl = pcd
 
-    def show(self):
+    def render_pcl(self):
         if not self.pcl:
             raise ValueError("You need to run <variable>.to_pcl() first")
         visualization.draw_geometries([self.pcl])
-    
+
     def quiver(self):
+        vecs = []
+        for coord, angle in zip(self.coords, self.angles):
+            vecs.append(coord)
+            vecs[-1].extend(angle)
+        self.vecs = vecs
+
+    def render_quiver(self):
+        if not self.vecs:
+            raise ValueError("You need to run <variable>.quiver() first")
+
+        soa = np.array(self.vecs)
+        X, Y, Z, U, V, W = zip(*soa)
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="3d")
+        ax.quiver(X, Y, Z, U, V, W)
+        plt.show()
 
 
-        pass
-
-
-
-def pack(data: pandas.DataFrame):
+def pack(data: pandas.DataFrame) -> list[Gesture]:
     gestures = []
     global joint
     for _, row in data.iterrows():
@@ -141,8 +157,11 @@ def pack(data: pandas.DataFrame):
             gesture.append(joint)
         gestures.append(Gesture(gesture[0], gesture[1:]))
         gestures[-1].to_pcl()
+        gestures[-1].quiver()
+
     return gestures
+
 
 print(df)
 gestures = pack(df)
-gestures[-1].show()
+gestures[-1].render_pcl()
