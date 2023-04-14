@@ -119,9 +119,7 @@ class Gesture:
             if joint.name == "Spine":
                 pass
             joint.move(lower_back)
-        for joint in self.joints:
-            if joint.name == "Spine":
-                joint.move(lower_back)
+        lower_back.move(lower_back)
 
     def to_pcl(self):
         positions = []
@@ -133,6 +131,7 @@ class Gesture:
         self.coords = positions
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(positions)
+        pcd.lables
         self.pcl = pcd
 
     def render_pcl(self):
