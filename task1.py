@@ -8,6 +8,16 @@ from mpl_toolkits.mplot3d import Axes3D
 from numpy.linalg import norm as mag
 from scipy.spatial.transform import Rotation as R
 import copy
+import matplotlib.pyplot as plt
+from os import environ
+def suppress_qt_warnings():
+    environ["QT_DEVICE_PIXEL_RATIO"] = "0"
+    environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    environ["QT_SCREEN_SCALE_FACTORS"] = "1"
+    environ["QT_SCALE_FACTOR"] = "1"
+
+if __name__ == "__main__":
+    suppress_qt_warnings()
 
 lookup = [
     "afternoon",
@@ -64,6 +74,44 @@ joints = [
     "Ankle_Right",
     "Foot_Right",
 ]
+joints_new = [
+    "Head", # Head
+    "Shoulder_Center", # Shoulder_Center
+    "Shoulder_Left", # Shoulder_Left
+    "Shoulder_Right", #  Shoulder_Right
+    "Elbow_Left", # Elbow_Left
+    "Elbow_Right",
+    "Wrist_Left", 
+    "Wrist_Right", # Wrist_Right ? 
+    "Hand_Left",
+    "Hand_Right", # Hand_Right ?
+    "Spine", # Spine
+    "Hip_Center",  # Hip_Center
+    "Hip_Left", # Hip_Left
+    "Hip_Right", # Hip_Right
+    "Knee_Left", # Knee_Left
+    "Knee_Right", # Knee_Right
+    "Ankle_Left", # Ankle_Left
+    "Ankle_Right", # Ankle_Right
+    "Foot_Left", # Foot_Left
+    "Foot_Right", # Foot_Right
+]
+print(len(joints))
+
+xyz = "xyz"
+angle = ["phi", "theta", "epsilon"]
+
+
+lables = ",".join(
+    [
+        ",".join([f"{joints_new[(i)//3]} {xyz[i%3]}" for i in range(0, 60)]),
+        ",".join([f"{joints_new[(i)//3]} {angle[i%3]}" for i in range(0, 60)]),
+        ",".join([f"mean {joints_new[(i)//3]} {angle[i%3]}" for i in range(0, 60)]),
+        ",".join([f"std {joints_new[(i)//3]} {angle[i%3]}" for i in range(0, 60)]),
+    ]
+)
+#print(lables)
+#exit(0)
 
 
 df = pandas.read_csv("train-final.csv")
@@ -154,21 +202,41 @@ class Gesture:
             joint.xyz = rot.apply(joint.xyz)
 
     def to_pcl(self):
-        positions = []
+        self.positions = []
         angles = []
+        colors = []
         for joint in self.joints:
-            positions.append(joint.xyz)
+            self.positions.append(joint.xyz)
             angles.append(joint.ang)
+            color = (joints.index(joint.name) + 1) / 21
+            # print(color)
+            colors.append([color, color, color])
         self.angles = angles
-        self.coords = positions
+        self.coords = self.positions
         pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(positions)
+        pcd.points = o3d.utility.Vector3dVector(self.positions)
+        pcd.colors = o3d.utility.Vector3dVector(colors)
         self.pcl = pcd
 
     def render_pcl(self):
         if not self.pcl:
             raise ValueError("You need to run <variable>.to_pcl() first")
         visualization.draw_geometries([self.pcl])
+
+    def matplot(self):
+        fig = plt.figure()
+        sbplt = fig.add_subplot(projection="3d")
+        sbplt.set_xlabel('X Label')
+        sbplt.set_ylabel('Y Label')
+        sbplt.set_zlabel('Z Label')
+
+        for joint in self.joints:
+            xyz = joint.xyz
+            sbplt.scatter(*xyz,marker='o')
+            sbplt.text(*xyz,joint.name)
+
+        plt.show()
+            
 
 
 def pack(data: pandas.DataFrame) -> list[Gesture]:
@@ -197,6 +265,7 @@ print(df)
 gestures = pack(df)
 
 print(len(gestures))
-FOR = o3d.geometry.TriangleMesh.create_coordinate_frame(
-    size=1, origin=[0,0,0])
-visualization.draw_geometries([FOR,*[gesture.pcl for gesture in gestures[1:3]]])
+FOR = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1 / 10, origin=[0, 0, 0])
+print("before viz")
+visualization.draw_geometries([FOR, *[gesture.pcl for gesture in gestures[0:-1]]])
+#gestures[-1].matplot()
