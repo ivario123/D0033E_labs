@@ -77,6 +77,13 @@ class Joint:
         self.mean = mean
         self.std = std
 
+    def move(self, other: "Joint"):
+        self.xyz = [
+            self.xyz[0] - other.xyz[0],
+            self.xyz[1] - other.xyz[1],
+            self.xyz[2] - other.xyz[2],
+        ]
+
     def __str__(self) -> str:
         return f"""{self.name} : 
             xyz     : {self.xyz},
@@ -105,6 +112,16 @@ class Gesture:
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    def norm_pos(self):
+        lower_back = [joint for joint in self.joints if joint.name == "Spine"][0]
+        for joint in self.joints:
+            if joint.name == "Spine":
+                pass
+            joint.move(lower_back)
+        for joint in self.joints:
+            if joint.name == "Spine":
+                joint.move(lower_back)
 
     def to_pcl(self):
         positions = []
@@ -156,12 +173,18 @@ def pack(data: pandas.DataFrame) -> list[Gesture]:
 
             gesture.append(joint)
         gestures.append(Gesture(gesture[0], gesture[1:]))
+        gestures[-1].norm_pos()
         gestures[-1].to_pcl()
         gestures[-1].quiver()
 
     return gestures
 
 
+df = df.sort_values(by=["gesture id"])
 print(df)
 gestures = pack(df)
-gestures[-1].render_pcl()
+
+print(len(gestures))
+#FOR = o3d.geometry.TriangleMesh.create_coordinate_frame(
+#    size=1, origin=[0,0,0])
+visualization.draw_geometries([*[gesture.pcl for gesture in gestures[1:4]]])
