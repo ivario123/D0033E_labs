@@ -5,6 +5,8 @@ import numpy as np
 from open3d import visualization
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from numpy.linalg import norm as mag
+from scipy.spatial.transform import Rotation as R
 
 lookup = [
     "afternoon",
@@ -72,17 +74,13 @@ df_norm = (df - df.mean()) / (df.max() - df.min())
 class Joint:
     def __init__(self, name: str, xyz, ang, mean, std):
         self.name = name
-        self.xyz = xyz
+        self.xyz = np.array(xyz)
         self.ang = ang
         self.mean = mean
         self.std = std
 
     def move(self, other: "Joint"):
-        self.xyz = [
-            self.xyz[0] - other.xyz[0],
-            self.xyz[1] - other.xyz[1],
-            self.xyz[2] - other.xyz[2],
-        ]
+        self.xyz = self.xyz - other.xyz
 
     def __str__(self) -> str:
         return f"""{self.name} : 
@@ -104,6 +102,7 @@ class Gesture:
         self.angles = []
         self.coords = []
         self.vecs = None
+        self.torso_angle()
 
     def __str__(self) -> str:
         return f"""{self.name}
@@ -121,6 +120,34 @@ class Gesture:
             joint.move(lower_back)
         lower_back.move(lower_back)
 
+    def torso_angle(self):
+
+        relevant_joints = ["Shoulder_Left", "Shoulder_Right", "Spine"]
+        relevant_joints = {
+            joint.name: joint for joint in self.joints if joint.name in relevant_joints
+        }
+        spine, ls, rs = (
+            relevant_joints["Spine"].xyz,
+            relevant_joints["Shoulder_Left"].xyz,
+            relevant_joints["Shoulder_Right"].xyz,
+        )
+
+        cl: np.ndarray = ls - spine
+        cr: np.ndarray = rs - spine
+        n = (1 / (mag(cl) * mag(cr))) * np.cross(cl, cr)
+        k = np.array([0, 0, 1])
+        phi = np.dot(n, k) / (mag(n))
+        self.rotation = -phi
+
+    def correct_rotation(self):
+        """
+        Rotates the entire figure by -phi
+        """
+
+        rot = R.from_rotvec([0, 0, self.rotation])
+        for joint in self.joints:
+            joint.xyz = rot.apply(joint.xyz)
+
     def to_pcl(self):
         positions = []
         angles = []
@@ -131,31 +158,12 @@ class Gesture:
         self.coords = positions
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(positions)
-        pcd.lables
         self.pcl = pcd
 
     def render_pcl(self):
         if not self.pcl:
             raise ValueError("You need to run <variable>.to_pcl() first")
         visualization.draw_geometries([self.pcl])
-
-    def quiver(self):
-        vecs = []
-        for coord, angle in zip(self.coords, self.angles):
-            vecs.append(coord)
-            vecs[-1].extend(angle)
-        self.vecs = vecs
-
-    def render_quiver(self):
-        if not self.vecs:
-            raise ValueError("You need to run <variable>.quiver() first")
-
-        soa = np.array(self.vecs)
-        X, Y, Z, U, V, W = zip(*soa)
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection="3d")
-        ax.quiver(X, Y, Z, U, V, W)
-        plt.show()
 
 
 def pack(data: pandas.DataFrame) -> list[Gesture]:
@@ -173,8 +181,8 @@ def pack(data: pandas.DataFrame) -> list[Gesture]:
             gesture.append(joint)
         gestures.append(Gesture(gesture[0], gesture[1:]))
         gestures[-1].norm_pos()
+        gestures[-1].correct_rotation()
         gestures[-1].to_pcl()
-        gestures[-1].quiver()
 
     return gestures
 
@@ -184,6 +192,6 @@ print(df)
 gestures = pack(df)
 
 print(len(gestures))
-#FOR = o3d.geometry.TriangleMesh.create_coordinate_frame(
+# FOR = o3d.geometry.TriangleMesh.create_coordinate_frame(
 #    size=1, origin=[0,0,0])
-visualization.draw_geometries([*[gesture.pcl for gesture in gestures[1:4]]])
+visualization.draw_geometries([*[gesture.pcl for gesture in gestures[1:2]]])
