@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from numpy.linalg import norm as mag
 from scipy.spatial.transform import Rotation as R
+import copy
 
 lookup = [
     "afternoon",
@@ -93,6 +94,12 @@ class Joint:
     def __repr__(self) -> str:
         return self.__str__()
 
+    def __eq__(self, __value: object) -> bool:
+
+        if all(self.xyz == __value.xyz):
+            return True
+        return False
+
 
 class Gesture:
     def __init__(self, name, joints: list[Joint]):
@@ -114,11 +121,9 @@ class Gesture:
 
     def norm_pos(self):
         lower_back = [joint for joint in self.joints if joint.name == "Spine"][0]
+        target = copy.deepcopy(lower_back)
         for joint in self.joints:
-            if joint.name == "Spine":
-                pass
-            joint.move(lower_back)
-        lower_back.move(lower_back)
+            joint.xyz = joint.xyz - target.xyz
 
     def torso_angle(self):
 
@@ -192,6 +197,6 @@ print(df)
 gestures = pack(df)
 
 print(len(gestures))
-# FOR = o3d.geometry.TriangleMesh.create_coordinate_frame(
-#    size=1, origin=[0,0,0])
-visualization.draw_geometries([*[gesture.pcl for gesture in gestures[1:2]]])
+FOR = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    size=1, origin=[0,0,0])
+visualization.draw_geometries([FOR,*[gesture.pcl for gesture in gestures[1:3]]])
