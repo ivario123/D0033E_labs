@@ -1,4 +1,5 @@
 import copy
+from math import floor
 from os import environ
 from typing import List
 
@@ -332,7 +333,7 @@ def to_df(gestures: List[Gesture]):
 
 def remove_correlated(df: pandas.DataFrame):
     """
-    Removes all columns that have at least 99% correlation with another column
+    Removes all columns that have at least 95% correlation with another column
     """
     original_shape = df.shape
     corr = df.corr().abs()  # find correlation
@@ -343,8 +344,7 @@ def remove_correlated(df: pandas.DataFrame):
     print("Showing correlation matrix")
     print("=" * 20)
     print()
-
-    limit = 0.99
+    limit = 0.95
     to_remove = []
     explanation = []
     for i in corr.columns:
@@ -355,16 +355,17 @@ def remove_correlated(df: pandas.DataFrame):
         for id, el in enumerate(corr[col]):
             if id == i:
                 continue
-            if el > limit:
+            if (
+                el > limit
+                and col not in to_remove
+                and list(corr.columns)[id] not in to_remove
+            ):
                 explanation.append(
-                    f"{col} has correlation of {el} with {list(corr.columns)[id]} and will be removed"
+                    f"{col} will be removed since it has a correlation of {floor(el*100)}\% with {list(corr.columns)[id]}"
                 )
                 # print(i, id, el)
                 to_remove.append(col)
                 break
-    print("=" * 20, "\n" * 2)
-    print(f"\n\n{'-'*20}\n\n".join(explanation))
-    print("\n" * 2, "=" * 20)
     # Borrowed from https://www.projectpro.io/recipes/drop-out-highly-correlated-features-in-python
     df.drop(to_remove, axis=1, inplace=True)
 
@@ -443,7 +444,7 @@ def visualize_gesture(id, gestures, hash_gestures, gesture_labels=False):
             ],
             window_name=f"User specified gestures",
         )
-    elif type(id) == Range[int]:
+    elif type(id) == range:
         visualization.draw_geometries(
             [
                 FOR,
@@ -506,6 +507,10 @@ cleanup_data_and_save(df)
 # Visualize the data in a few ways
 for gesture in gestures:
     gesture.move_to_relative_origin()
+
+
+visualize_gesture("you", gestures, hash_gestures)
+visualize_gesture("yes", gestures, hash_gestures)
 
 for i in range(0, len(lookup), 4):
     visualize_gesture(
