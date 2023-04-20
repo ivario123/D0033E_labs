@@ -152,7 +152,6 @@ class Joint:
         return self.__str__()
 
     def __eq__(self, __value: object) -> bool:
-
         if all(self.xyz == __value.xyz):
             return True
         return False
@@ -178,6 +177,12 @@ class Gesture:
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    def move_to_relative_origin(self):
+        offset = lookup.index(self.name)
+        for joint in self.joints:
+            joint.xyz = joint.xyz + np.array([0, 0, offset])
+        self.to_pcl()
 
     def norm_pos(self):
         """
@@ -207,19 +212,19 @@ class Gesture:
         cl: np.ndarray = ls - spine
         cr: np.ndarray = rs - spine
         n = (1 / (mag(cl) * mag(cr))) * np.cross(cl, cr)
-        k = np.array([0, 1, 0])
+        k = np.array([0, 0, 1])
 
         if mag(n) != 0:
             phi = np.dot(n, k) / (mag(n))
         else:
             phi = 0
-        self.rotation = -phi
+        self.rotation = phi
 
     def correct_rotation(self):
         """
-        Rotates the entire figure by -phi
+        Rotates the entire figure by phi
         """
-        rot = R.from_rotvec([0, 0, self.rotation])
+        rot = R.from_rotvec([0, self.rotation, 0])
         for joint in self.joints:
             joint.xyz = rot.apply(joint.xyz)
 
@@ -232,7 +237,6 @@ class Gesture:
         colors = []
         indices = []
         for joint in self.joints:
-
             # Add the joint to the point cloud
             self.positions.append(joint.xyz)
             angles.append(joint.ang)
@@ -280,6 +284,7 @@ class Gesture:
     def render_pcl(self):
         if not self.pcl:
             raise ValueError("You need to run <variable>.to_pcl() first")
+
         visualization.draw_geometries([self.pcl])
 
     def matplot(self):
@@ -304,7 +309,6 @@ class Gesture:
         }
         global joints
         for joint in joints[:blacklist_index]:
-
             map["xyz"].extend(self.joints_hash[joint].xyz)
             map["mean"].extend(self.joints_hash[joint].mean)
             map["std"].extend(self.joints_hash[joint].std)
@@ -328,19 +332,19 @@ def to_df(gestures: List[Gesture]):
 
 def remove_correlated(df: pandas.DataFrame):
     """
-    Removes all columns that have atleast 98% correlation with another column
+    Removes all columns that have at least 99% correlation with another column
     """
     original_shape = df.shape
     corr = df.corr().abs()  # find correlation
     # Create a heatmap
-    sn.heatmap(corr)
+    sn.heatmap(corr, robust=True)
     print()
     print("=" * 20)
     print("Showing correlation matrix")
     print("=" * 20)
     print()
 
-    limit = 0.95
+    limit = 0.99
     to_remove = []
     explanation = []
     for i in corr.columns:
@@ -391,10 +395,36 @@ def pack(data: pandas.DataFrame) -> list[Gesture]:
     return gestures
 
 
-def visualize_gesture(id, gestures, hash_gestures):
+def visualize_gesture(id, gestures, hash_gestures, gesture_labels=False):
     FOR = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=1 / 10, origin=[0, 0, 0]
     )
+    if gesture_labels:
+        if type(id) == int:
+            visualization.draw_geometries(
+                [
+                    FOR,
+                    *[gesture.pcl for gesture in hash_gestures[lookup[id]]],
+                    *[gesture.ls for gesture in hash_gestures[lookup[id]]],
+                ],
+                window_name=f"all {lookup[id]} gestures",
+            )
+        elif type(id) == range:
+            gestures = [lookup[i] for i in id]
+            render_gestures = []
+            for gesture in gestures:
+                if gesture not in hash_gestures.keys():
+                    pass
+                render_gestures.extend(hash_gestures[gesture])
+            label = [lookup[i] for i in id]
+            visualization.draw_geometries(
+                [
+                    *[gesture.pcl for gesture in render_gestures],
+                    *[gesture.ls for gesture in render_gestures],
+                ],
+                window_name=f"all {label} gestures",
+            )
+        return
     if type(id) == int:
         visualization.draw_geometries(
             [
@@ -413,7 +443,7 @@ def visualize_gesture(id, gestures, hash_gestures):
             ],
             window_name=f"User specified gestures",
         )
-    elif type(id) == range:
+    elif type(id) == Range[int]:
         visualization.draw_geometries(
             [
                 FOR,
@@ -460,13 +490,29 @@ hash_gestures = {
 }
 
 
-# Visualize the data in a few ways
+"""
+
 visualize_gesture(range(0, 10), gestures, hash_gestures)
-visualize_gesture(0, gestures, hash_gestures)
 visualize_gesture("thankyou", gestures, hash_gestures)
-gestures[-1].matplot()
+"""
+# visualize_gesture(0, gestures, hash_gestures)
+
+map(lambda x: x.matplot(), gestures)
 
 """
     Clean up and store result in data_pp.csv
 """
 cleanup_data_and_save(df)
+# Visualize the data in a few ways
+for gesture in gestures:
+    gesture.move_to_relative_origin()
+
+for i in range(0, len(lookup), 4):
+    visualize_gesture(
+        range(i + 3, i - 1, -1)
+        if i + 3 < len(lookup)
+        else range(len(lookup) - 1, i - 1, -1),
+        gestures,
+        hash_gestures,
+        gesture_labels=True,
+    )
