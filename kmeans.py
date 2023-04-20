@@ -140,7 +140,6 @@ def plot_2d(clusters, centroids, k, errors):
 
 
 if __name__ == "__main__":
-    # Data has the shape [[x1,y1,z1], [x2,y2,z2], ...]]
     data = init_centroid(100, 2, min=100, max=10000)
 
     clusters, centroids, k, errors = kmautomatic(data)
