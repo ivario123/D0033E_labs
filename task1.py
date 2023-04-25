@@ -467,7 +467,7 @@ def visualize_gesture(id, gestures, hash_gestures, gesture_labels=False):
 def cleanup_data_and_save(df: pandas.DataFrame):
     df = to_df(gestures)
     df = remove_correlated(df)
-    df.to_csv("data_pp.csv", index=False)
+    df.to_csv("data_processed.csv", index=False)
 
 
 # Read data from the csv using pandas
@@ -491,11 +491,8 @@ hash_gestures = {
 }
 
 
-"""
-
 visualize_gesture(range(0, 10), gestures, hash_gestures)
 visualize_gesture("thankyou", gestures, hash_gestures)
-"""
 # visualize_gesture(0, gestures, hash_gestures)
 
 map(lambda x: x.matplot(), gestures)
