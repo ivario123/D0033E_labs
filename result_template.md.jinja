@@ -1,0 +1,49 @@
+# Results
+
+## KNN
+
+### Best parameters
+    
+```python
+metric  = {{knn_ret[1][0][0]["metric"]}}
+k       = {{knn_ret[1][0][0]["k"]}}
+```
+
+### Best score
+
+```python
+score   = {{knn_ret[1][0][1]}}
+```
+
+## Decision Tree
+
+### Best parameters
+
+```python
+max_depth           = {{tree_ret[3][0][0]["depth"]}}
+min_samples_split   = {{tree_ret[3][0][0]["split"]}}
+min_samples_leaf    = {{tree_ret[3][0][0]["leaf"]}}
+```
+
+### Best score
+
+```python
+score              = {{tree_ret[3][0][1][0]}}
+actual depth       = {{tree_ret[3][0][1][1]}}
+```
+
+## Random Forest
+
+### Best parameters
+
+```python
+max_depth           = {{forest_ret[3][0][0]["depth"]}}
+min_samples_split   = {{forest_ret[3][0][0]["split"]}}
+n_estimators        = {{forest_ret[3][0][0]["est"]}} 
+```
+
+### Best score
+
+```python
+score               = {{forest_ret[3][0][1]}}
+```

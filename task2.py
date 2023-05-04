@@ -1,17 +1,17 @@
-from math import sqrt
-from typing import Any, Callable, Tuple, List
+from threading import Thread
+from typing import Any, Callable, List, Tuple
 
 from pandas import DataFrame as df
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
-
-from knn import EUCLIDEAN, MANHATTAN, MINKOWSKI, KNNClassifier
-from sk_tree import DecisionTreeClassifier
-
 from sklearn.neighbors import KNeighborsClassifier
-from task1 import preprocess
 
-from threading import Thread
+from knn import EUCLIDEAN
+from sk_tree import DecisionTreeClassifier
+from task1 import preprocess
+import time
+
+NUM_SAMPLES = 5
 
 
 def info(func: Callable):
@@ -24,12 +24,19 @@ def info(func: Callable):
 
         print(f"{' '*offset(len(name),l)}{name}")
         print("=" * l)
-        ret = func(*args, **kwargs)
+        start_time = time.time()
+        # Functions decorated with @info should not return anything
+        func(*args, **kwargs)
+        end_time = time.time()
         print("-" * l)
-        print(f"{' '*(offset(len(str(ret)),l))}{ret}")
+        end_msg = f"function {name} finished in {(end_time - start_time):.1f} seconds"
+        print(f"{' '*(offset(len(str(end_msg)),l))}{end_msg}")
         print("-" * l)
 
     return wrapper
+
+
+from statistics import mean
 
 
 def itter(
@@ -45,11 +52,33 @@ def itter(
     assert arg != "", "arg must be defined"
     assert r is not None, "r must be defined"
     for i, val in enumerate(r):
-        score = target_func(train_X, train_y, test_X, test_y, **{arg: val})
-        yield i, score
+        if target_func == tree:
+            scores = [
+                target_func(train_X, train_y, test_X, test_y, **{arg: val})
+                for _ in range(NUM_SAMPLES)
+            ]
+
+            def strip(x):
+                return [i[0] for i in x], [i[1] for i in x]
+
+            scores, depths = strip(scores)
+
+            score = mean([float(score) for score in scores])
+            depths = int(mean(depths))
+            yield i, (score, depths)
+        else:
+            score = mean(
+                [
+                    float(target_func(train_X, train_y, test_X, test_y, **{arg: val}))
+                    for _ in range(NUM_SAMPLES)
+                ]
+            )
+            yield i, score
 
 
-top = lambda x, y: sorted(zip(x, y), key=lambda x: x[1], reverse=True)[:3]
+top = lambda x, y: sorted(
+    zip(x, y), key=lambda x: x[1][0] if type(x[1]) == list else x[1], reverse=True
+)[:3]
 
 
 def load_data(
@@ -97,7 +126,7 @@ def knn_parameter_sweep(
     """
     Sweeps over the parameters n_neighbors and distance_metric
     """
-    measures_str = ["euclidean", "manhattan", "minkowski"]
+    measures_str = ["euclidean", "manhattan"]
 
     def itter_int(r: enumerate, scores: List):
         for i, measure in enumerate(measures_str):
@@ -147,7 +176,7 @@ def tree(train_X, train_y, test_X, test_y, **kwargs):
 
     # Compute the accuracy
     tree_pred = tree.predict(test_X)
-    return accuracy_score(test_y, tree_pred)
+    return accuracy_score(test_y, tree_pred), tree.get_depth()
 
 
 @info
@@ -169,7 +198,6 @@ def tree_parameter_sweep(
     """
 
     def listcomp(r, arg, return_value: List):
-        print(f"Sweeping {arg} in {r}")
         ret = [
             score
             for _, score in itter(
@@ -224,7 +252,54 @@ def tree_parameter_sweep(
                         ),
                     )
                 )
-    best.append(sorted(combined_scores, key=lambda x: x[1], reverse=True)[0])
+    # Try only the best combinations
+
+    combined_scores.append(
+        (
+            {"depth": top_depth[0][1], "split": 2, "leaf": 1},
+            tree(
+                train_X,
+                train_y,
+                test_X,
+                test_y,
+                max_depth=top_depth[0][1],
+            ),
+        )
+    )
+    combined_scores.append(
+        (
+            {"depth": 5, "split": top_split[0][1], "leaf": 1},
+            tree(
+                train_X,
+                train_y,
+                test_X,
+                test_y,
+                min_samples_split=top_split[0][1],
+            ),
+        )
+    )
+    combined_scores.append(
+        (
+            {"depth": 5, "split": 2, "leaf": top_leaf[0][1]},
+            tree(
+                train_X,
+                train_y,
+                test_X,
+                test_y,
+                min_samples_leaf=top_leaf[0][1],
+            ),
+        )
+    )
+    score = lambda x: x[1][0]
+
+    def optimal(scores):
+        # We want to minimize the actual depth but keep the score high
+        ordered = sorted(scores, key=score, reverse=True)
+        return sorted(
+            [i for i in ordered if i[1][0] == ordered[0][1][0]], key=lambda x: x[1][1]
+        )[0]
+
+    best.append(sorted(combined_scores, key=score, reverse=True)[0])
     print(f"Best tree parameters: {best}")
 
 
@@ -282,21 +357,23 @@ def random_forest_parameter_sweep(
         ]
         return_value.extend(ret)
 
-    start_and_wait([
-        Thread(
-            target=list_comp,
-            args=(depth_range, "max_depth", score_depth),
-        ),
-        Thread(
-            target=list_comp,
-            args=(min_samples_split_range, "min_samples_split", score_split),
-        ),
-        Thread(
-            target=list_comp,
-            args=(n_estimators_range, "n_estimators", score_est),
-        ),
-    ])
-    
+    start_and_wait(
+        [
+            Thread(
+                target=list_comp,
+                args=(depth_range, "max_depth", score_depth),
+            ),
+            Thread(
+                target=list_comp,
+                args=(min_samples_split_range, "min_samples_split", score_split),
+            ),
+            Thread(
+                target=list_comp,
+                args=(n_estimators_range, "n_estimators", score_est),
+            ),
+        ]
+    )
+
     top_depth = top(depth_range, score_depth)
     top_split = top(min_samples_split_range, score_split)
     top_est = top(n_estimators_range, score_est)
@@ -322,156 +399,95 @@ def random_forest_parameter_sweep(
 
     def optimal(scores):
         # We want to minimize the depth and estimators, but maximize the split and score
-
-        eval = lambda x: x[1] / (x[0]["depth"] * 10 + x[0]["split"] + x[0]["est"] * 5)
-        return sorted(scores, key=eval, reverse=True)[0]
+        eval = lambda x: x[
+            1
+        ]  # / (x[0]["depth"] * 10 + x[0]["split"] + x[0]["est"] * 5)
+        ordered = sorted(scores, key=eval, reverse=True)
+        return sorted(
+            [i for i in ordered if i[1] == ordered[0][1]], key=lambda x: x[0]["depth"]
+        )[0]
 
     best.append(optimal(scores))
     print(f"Best random forest parameters: {best}")
 
 
 if __name__ == "__main__":
-    from task1 import suppress_qt_warnings
     from threading import Thread
 
+    import matplotlib.pyplot as plt
+    from jinja2 import Environment, FileSystemLoader
+
+    from task1 import suppress_qt_warnings
+
+    # qt5 warnings clutter up the output
     suppress_qt_warnings()
-    train, test = load_data()
+
+    # Retrieve the data from the csv files and preprocess them
+    train, test = load_data(corr_threshold=0.95)
+
+    # Define input and output parameters
     k_range = range(5, 25)
     knn_ret, tree_ret, forest_ret = (
-        ([[0 for _ in k_range] for _ in range(3)], []),
+        ([[0 for _ in k_range] for _ in range(2)], []),
         ([], [], [], []),
         ([], [], [], []),
     )
     knn_parameters, tree_parameters, forest_parameters = (
-        [range(5, 25)],
-        [range(1, 30), range(2, 30), range(1, 30)],
-        [range(1, 50), range(2, 50), range(1, 50)],
+        [k_range],  # k
+        [range(1, 30), range(2, 30), range(1, 30)],  # depth, split, leaf
+        [range(1, 50), range(2, 50), range(1, 50)],  # depth, split, est
     )
+    t = lambda f, ret, param: Thread(target=f, args=(*train, *test, *ret, *param))
+    # Start the threads, one for each algorithm
+    start_and_wait(
+        [
+            t(knn_parameter_sweep, knn_ret, knn_parameters),
+            t(tree_parameter_sweep, tree_ret, tree_parameters),
+            t(random_forest_parameter_sweep, forest_ret, forest_parameters),
+        ]
+    )
+    image_folder = "./images"
 
-    # Start the threads,
-    threads = [
-        Thread(
-            target=knn_parameter_sweep,
-            args=(
-                *train,
-                *test,
-                *knn_ret,
-                *knn_parameters,
-            ),
-        ),
-        Thread(
-            target=tree_parameter_sweep,
-            args=(
-                *train,
-                *test,
-                *tree_ret,
-                *tree_parameters,
-            ),
-        ),
-        Thread(
-            target=random_forest_parameter_sweep,
-            args=(
-                *train,
-                *test,
-                *forest_ret,
-                *forest_parameters,
-            ),
-        ),
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    # Plot the results
+    def fig(name):
+        plt.figure(name)
+        plt.title(name)
+        plt.ylabel("accuracy")
 
-    # Plot the scores
-    # in 3 different figures
+    def end_fig(name):
+        plt.legend()
+        plt.savefig(image_folder + f"/{name}_{NUM_SAMPLES}.png")
 
-    import matplotlib.pyplot as plt
-
-    plt.figure()
-    plt.title("KNN parameter sweep")
-    plt.ylabel("accuracy")
+    fig("KNN parameter sweep")
+    plt.xlabel("k")
     for i, score in enumerate(knn_ret[0]):
-        plt.plot(k_range, score, label=["euclidean", "manhattan", "minkowski"][i])
+        plt.plot(k_range, score, label=["euclidean", "manhattan"][i])
+    end_fig("knn")
 
-    plt.legend()
-
-    plt.figure()
-    plt.title("Decision Tree parameter sweep")
-    plt.ylabel("accuracy")
-    plt.plot(range(1, 30), tree_ret[0], label="max_depth")
-    plt.plot(range(2, 30), tree_ret[1], label="min_samples_split")
-    plt.plot(range(1, 30), tree_ret[2], label="min_samples_leaf")
-    plt.legend()
-
-    plt.figure()
-    plt.title("Random Forest parameter sweep")
-    plt.ylabel("accuracy")
-    plt.plot(range(1, 50), forest_ret[0], label="max_depth")
-    plt.plot(range(2, 50), forest_ret[1], label="min_samples_split")
-    plt.plot(range(1, 50), forest_ret[2], label="n_estimators")
-    plt.legend()
-    print(knn_ret[1])
-    plt.show()
-    with open("results.md", "w") as f:
-        f.write(
-            f"""
-# Results
-
-## KNN
-
-### Best parameters
-
-```python
-metric  = {knn_ret[1][0][0]["metric"]}
-k       = {knn_ret[1][0][0]["k"]}
-```
-
-### Best score
-
-```python
-score   = {knn_ret[1][0][1]}
-```
-
-## Decision Tree
-
-### Best parameters
-
-```python
-max_depth           = {tree_ret[3][0][0]["depth"]}
-min_samples_split   = {tree_ret[3][0][0]["split"]}
-min_samples_leaf    = {tree_ret[3][0][0]["leaf"]}
-```
-
-### Best score
-
-```python
-score              = {tree_ret[3][0][1]}
-```
-
-## Random Forest
-
-### Best parameters
-
-The random forest best parameter depends
-on some randomness, so the result may vary.
-Our way of determining the best parameter
-is $`score / (depth * 10 + split + est * 5)`$.
-since we want to minimize the depth and estimators,
-and don't really care about the split but want to maximize the score.
-
-
-```python
-max_depth           = {forest_ret[3][0][0]["depth"]}
-min_samples_split   = {forest_ret[3][0][0]["split"]}
-n_estimators        = {forest_ret[3][0][0]["est"]} 
-```
-
-### Best score
-
-```python
-score               = {forest_ret[3][0][1]}
-```
-"""
+    fig("Decision Tree parameter sweep")
+    strip = lambda x: [i[0] for i in x]
+    for i in range(len(tree_parameters)):
+        plt.plot(
+            tree_parameters[i], strip(tree_ret[i]), label=["depth", "split", "leaf"][i]
         )
+    end_fig("tree")
+
+    fig("Random Forest parameter sweep")
+    for i in range(len(forest_parameters)):
+        plt.plot(
+            forest_parameters[i],
+            forest_ret[i],
+            label=["depth", "split", "est"][i],
+        )
+    end_fig("forest")
+    plt.show()
+
+    # Write the results to a file
+    env = Environment(loader=FileSystemLoader("."))
+    template = env.get_template("result_template.md.jinja")
+    template.stream(
+        tree_ret=tree_ret,
+        knn_ret=knn_ret,
+        forest_ret=forest_ret,
+    ).dump("results.md")
     print("Done")

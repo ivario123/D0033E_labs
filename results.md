@@ -1,10 +1,9 @@
-
 # Results
 
 ## KNN
 
 ### Best parameters
-
+    
 ```python
 metric  = manhattan
 k       = 5
@@ -13,7 +12,7 @@ k       = 5
 ### Best score
 
 ```python
-score   = 0.8629629629629629
+score   = 0.8611111111111112
 ```
 
 ## Decision Tree
@@ -22,32 +21,25 @@ score   = 0.8629629629629629
 
 ```python
 max_depth           = 29
-min_samples_split   = 29
-min_samples_leaf    = 27
+min_samples_split   = 2
+min_samples_leaf    = 1
 ```
 
 ### Best score
 
 ```python
-score              = 0.5222222222222223
+score              = 1.0
+actual depth       = 14
 ```
 
 ## Random Forest
 
 ### Best parameters
 
-The random forest best parameter depends
-on some randomness, so the result may vary.
-Our way of determining the best parameter
-is $`score / (depth * 10 + split + est * 5)`$.
-since we want to minimize the depth and estimators,
-and don't really care about the split but want to maximize the score.
-
-
 ```python
-max_depth           = 14
-min_samples_split   = 2
-n_estimators        = 31 
+max_depth           = 22
+min_samples_split   = 3
+n_estimators        = 49 
 ```
 
 ### Best score
