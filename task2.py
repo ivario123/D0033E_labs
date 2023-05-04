@@ -10,7 +10,7 @@ from knn import EUCLIDEAN
 from sk_tree import DecisionTreeClassifier
 from task1 import preprocess
 import time
-
+from sklearn import svm
 NUM_SAMPLES = 5
 
 
@@ -104,6 +104,16 @@ def start_and_wait(threads: List[Thread]):
         thread.start()
     for thread in threads:
         thread.join()
+
+
+def svm_func(X,y,X_t,y_t):
+    clf=svm.LinearSVC(C=1.0,multi_class='ovr')
+    clf.fit(X,y) #training data
+    prediction=clf.predict(X_t)
+    acc=accuracy_score(y_t,prediction)
+    return acc
+
+    
 
 
 def knn(train_X, train_y, test_X, test_y, n_neighbors=5, distance_measure=EUCLIDEAN):
@@ -425,6 +435,10 @@ if __name__ == "__main__":
     # Retrieve the data from the csv files and preprocess them
     train, test = load_data(corr_threshold=0.95)
 
+    acc=svm_func(*train,*test)
+    print(f"Accuracy SVM: {acc:.5f}")
+    
+    #exit()
     # Define input and output parameters
     k_range = range(5, 25)
     knn_ret, tree_ret, forest_ret = (
@@ -441,6 +455,7 @@ if __name__ == "__main__":
     # Start the threads, one for each algorithm
     start_and_wait(
         [
+     #       t(svm_func,svm_ret,svm_parameters),
             t(knn_parameter_sweep, knn_ret, knn_parameters),
             t(tree_parameter_sweep, tree_ret, tree_parameters),
             t(random_forest_parameter_sweep, forest_ret, forest_parameters),

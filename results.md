@@ -37,9 +37,9 @@ actual depth       = 14
 ### Best parameters
 
 ```python
-max_depth           = 22
-min_samples_split   = 3
-n_estimators        = 49 
+max_depth           = 18
+min_samples_split   = 9
+n_estimators        = 35 
 ```
 
 ### Best score
