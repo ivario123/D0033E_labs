@@ -1,15 +1,59 @@
-from pandas import DataFrame as df
-from typing import Tuple, Any
+from math import sqrt
+from typing import Any, Callable, Tuple, List
 
-from task1 import preprocess
-from knn import KNNClassifier, EUCLIDEAN, MANHATTAN, MINKOWSKI
-from sk_tree import DecisionTreeClassifier
+from pandas import DataFrame as df
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 
-from math import sqrt
+from knn import EUCLIDEAN, MANHATTAN, MINKOWSKI, KNNClassifier
+from sk_tree import DecisionTreeClassifier
+from task1 import preprocess
 
-top_5 = lambda x, y: sorted(zip(x, y), key=lambda x: x[1], reverse=True)[:5]
+from threading import Thread
+
+
+def info(func: Callable):
+    offset = lambda x, y: y // 2 - x // 2 if y > x else 0
+    l = 50
+    name = func.__name__.replace("_", " ").upper()
+
+    def wrapper(*args, **kwargs):
+        print("=" * l)
+
+        print(f"{' '*offset(len(name),l)}{name}")
+        print("=" * l)
+        ret = func(*args, **kwargs)
+        print("-" * l)
+        print(f"{' '*(offset(len(str(ret)),l))}{ret}")
+        print("-" * l)
+
+    return wrapper
+
+
+def itter(
+    train_X,
+    train_y,
+    test_X,
+    test_y,
+    r: range,
+    arg: str = "",
+    target_func: Callable = None,
+):
+    assert target_func is not None, "target_func must be defined"
+    assert arg != "", "arg must be defined"
+    assert r is not None, "r must be defined"
+    print(f"Sweeping {arg} in {r}")
+    print(f"{'-'*50}")
+    for i, val in enumerate(r):
+        score = target_func(train_X, train_y, test_X, test_y, **{arg: val})
+        print(f"{val} -> {score:.3f}")
+
+        yield i, score
+    print("Sweep complete")
+    print(f"{'-'*50}")
+
+
+top = lambda x, y: sorted(zip(x, y), key=lambda x: x[1], reverse=True)[:3]
 
 
 def load_data(
@@ -30,67 +74,85 @@ def load_data(
     return train, test
 
 
+# Import knn
+from sklearn.neighbors import KNeighborsClassifier
+
+
 def knn(train_X, train_y, test_X, test_y, n_neighbors=5, distance_measure=EUCLIDEAN):
-    knn = KNNClassifier(k=n_neighbors, distance_measure=distance_measure)
+    knn = KNeighborsClassifier(n_neighbors=n_neighbors, metric=distance_measure)
     knn.fit(train_X, train_y)
-    knn_pred = knn.estimate(test_X)
+    knn_pred = knn.predict(test_X)
     return accuracy_score(test_y, knn_pred)
 
 
+@info
 def knn_parameter_sweep(
-    train_X, train_y, test_X, test_y, n_neighbors_min=5, n_neighbors_max=0
-):
-    """
-    Sweeps over the parameters n_neighbors and distance_metric
-    """
-    if n_neighbors_min < 1:
-        raise ValueError("n_neighbors_min must be greater than 0")
-
-    if n_neighbors_max < n_neighbors_min and n_neighbors_max > 0:
-        raise ValueError("n_neighbors_max must be greater than n_neighbors_min")
-
-    if n_neighbors_max < 1:
-        n_neighbors_max = int(sqrt(len(train_y)))
-
-    scores = [[0 for _ in range(n_neighbors_min, n_neighbors_max)] for _ in range(3)]
-    measures = [EUCLIDEAN, MANHATTAN, MINKOWSKI]
-    measures_str = ["euclidean", "manhattan", "minkowski"]
-    for i, measure in enumerate(measures):
-        for index, n_neighbors in enumerate(range(n_neighbors_min, n_neighbors_max)):
-            scores[i][index] = knn(
-                train_X, train_y, test_X, test_y, n_neighbors, measure
-            )
-            print(
-                f"n_neighbors: {n_neighbors}, metric: {measures_str[i]}, accuracy: {scores[i][index]}"
-            )
-
-    import matplotlib.pyplot as plt
-
-    plt.title("KNN parameter sweep")
-    plt.ylabel("accuracy")
-
-    plt.plot(range(1, n_neighbors_max + 1), scores[0], label="euclidean")
-    plt.plot(range(1, n_neighbors_max + 1), scores[1], label="manhattan")
-    plt.plot(range(1, n_neighbors_max + 1), scores[2], label="minkowski")
-    plt.legend()
-    plt.show()
-
-
-def tree(
     train_X,
     train_y,
     test_X,
     test_y,
-    max_depth=5,
-    min_samples_split=2,
-    min_samples_leaf=1,
+    scores,
+    best,
+    k_range=range(5, 20),
+    debug_print=False,
 ):
+    """
+    Sweeps over the parameters n_neighbors and distance_metric
+    """
+    measures = [EUCLIDEAN, MANHATTAN, MINKOWSKI]
+    measures_str = ["euclidean", "manhattan", "minkowski"]
+
+    def itter_int(r: enumerate, scores: List):
+        for i, measure in enumerate(measures_str):
+            for index, k_range in r:
+                print(f"Measuring {measures_str[i]} for k={k_range}")
+
+                scores[i][index] = knn(
+                    train_X, train_y, test_X, test_y, k_range, measure
+                )
+                print(
+                    f"n_neighbors: {k_range}, metric: {measures_str[i]}, accuracy: {scores[i][index]}"
+                )
+
+    from threading import Thread
+
+    number_of_threads = 3
+    enum = enumerate(k_range)
+
+    def split_enum(e, sections) -> list[enumerate]:
+        ret = [[] for _ in range(sections)]
+        for i, val in e:
+            ret[i % sections].append((i, val))
+        return ret
+
+    enums = split_enum(enum, number_of_threads)
+    threads = [
+        Thread(target=itter_int, args=(enums[i], scores))
+        for i in range(number_of_threads)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    # Find top 5 scores
+    def optimal(scores):
+        best = (0, 0, float("-inf"))
+        for index, el in enumerate(scores):
+            for i, score in enumerate(el):
+                if score > best[2]:
+                    best = (index, i, score)
+        return best
+
+    # Find the best combination
+    opt = optimal(scores)
+    best.append({"metric": measures_str[opt[0]], "k": k_range[opt[1]]}, opt[2])
+    return best
+
+
+def tree(train_X, train_y, test_X, test_y, **kwargs):
     # Define classifiers
-    tree = DecisionTreeClassifier(
-        max_depth=max_depth,
-        min_samples_split=min_samples_split,
-        min_samples_leaf=min_samples_leaf,
-    )
+    tree = DecisionTreeClassifier(**kwargs)
 
     # Fit the models
     tree.fit(train_X, train_y)
@@ -100,61 +162,75 @@ def tree(
     return accuracy_score(test_y, tree_pred)
 
 
+@info
 def tree_parameter_sweep(
     train_X,
     train_y,
     test_X,
     test_y,
+    scores_depth,
+    scores_split,
+    scores_leaf,
+    best,
     depth_range=range(1, 10),
     min_samples_split_range=range(2, 10),
     min_samples_leaf_range=range(1, 10),
+    debug_print=False,
 ):
     """
     Sweeps over the parameters max_depth, min_samples_split and min_samples_leaf
     """
     mean = lambda x: sum(x) / len(x)
-    scores_depth = [0 for _ in depth_range]
-    scores_split = [0 for _ in min_samples_split_range]
-    scores_leaf = [0 for _ in min_samples_leaf_range]
-    for index, depth in enumerate(depth_range):
-        scores_depth[index] = mean(
-            [tree(train_X, train_y, test_X, test_y, max_depth=depth) for _ in range(10)]
-        )
-        print(f"max_depth: {depth}, score: {scores_depth[index]}")
-    for index, split in enumerate(min_samples_split_range):
-        scores_split[index] = mean(
-            [
-                tree(train_X, train_y, test_X, test_y, min_samples_split=split)
-                for _ in range(10)
-            ]
-        )
-        print(f"min_samples_split: {split}, score: {scores_split[index]}")
-    for index, leaf in enumerate(min_samples_leaf_range):
-        scores_leaf[index] = mean(
-            [
-                tree(train_X, train_y, test_X, test_y, min_samples_leaf=leaf)
-                for _ in range(10)
-            ]
-        )
-        print(f"min_samples_leaf: {leaf}, score: {scores_leaf[index]}")
+
+    # Define a function that takes a listcomp and returns a list
+    def listcomp(r, arg, return_value: List):
+        print(f"Sweeping {arg} in {r}")
+        ret = [
+            score
+            for _, score in itter(
+                train_X,
+                train_y,
+                test_X,
+                test_y,
+                r,
+                arg,
+                target_func=tree,
+            )
+        ]
+        return_value.extend(ret)
+
+    depth_thread = Thread(
+        target=listcomp,
+        args=(depth_range, "max_depth", scores_depth),
+    )
+    split_thread = Thread(
+        target=listcomp,
+        args=(min_samples_split_range, "min_samples_split", scores_split),
+    )
+    leaf_thread = Thread(
+        target=listcomp,
+        args=(min_samples_leaf_range, "min_samples_leaf", scores_leaf),
+    )
+    depth_thread.start()
+    split_thread.start()
+    leaf_thread.start()
+    # Get return values
+    depth_thread.join()
+    split_thread.join()
+    leaf_thread.join()
 
     # Find top 5 scores
-    top_depth = top_5(scores_depth, depth_range)
-    top_split = top_5(scores_split, min_samples_split_range)
-    top_leaf = top_5(scores_leaf, min_samples_leaf_range)
-
-    print(f"Top 5 max_depth: {top_depth}")
-    print(f"Top 5 min_samples_split: {top_split}")
-    print(f"Top 5 min_samples_leaf: {top_leaf}")
+    top_depth = top(scores_depth, depth_range)
+    top_split = top(scores_split, min_samples_split_range)
+    top_leaf = top(scores_leaf, min_samples_leaf_range)
 
     combined_scores = []
-    # Rerun for all combinations of top 5
-    for depth, _ in top_depth:
-        for split, _ in top_split:
-            for leaf, _ in top_leaf:
+    for _, depth in top_depth:
+        for _, split in top_split:
+            for _, leaf in top_leaf:
                 combined_scores.append(
                     (
-                        (depth, split, leaf),
+                        {"depth": depth, "split": split, "leaf": leaf},
                         tree(
                             train_X,
                             train_y,
@@ -166,15 +242,14 @@ def tree_parameter_sweep(
                         ),
                     )
                 )
-
-                print(
-                    f"max_depth: {depth}, min_samples_split: {split}, min_samples_leaf: {leaf}, score: {combined_scores[-1]}"
-                )
-    best = sorted(combined_scores, key=lambda x: x[1], reverse=True)[0]
-    print(f"Best combination: {best}")
+    best.append(sorted(combined_scores, key=lambda x: x[1], reverse=True)[0])
+    if debug_print:
+        print(f"Best combination: {best}")
 
     import matplotlib.pyplot as plt
 
+    """
+    plt.figure()
     plt.title("Decision Tree parameter sweep")
     plt.ylabel("accuracy")
 
@@ -182,7 +257,8 @@ def tree_parameter_sweep(
     plt.plot(min_samples_split_range, scores_split, label="min_samples_split")
     plt.plot(min_samples_leaf_range, scores_leaf, label="min_samples_leaf")
     plt.legend()
-    plt.show()
+    """
+    return best
 
 
 def random_forest(
@@ -195,67 +271,82 @@ def random_forest(
     min_samples_leaf=1,
     n_estimators=10,
 ):
-    # Define classifiers
     forest = RandomForestClassifier(
         max_depth=max_depth,
         min_samples_split=min_samples_split,
         min_samples_leaf=min_samples_leaf,
         n_estimators=n_estimators,
     )
-
-    # Fit the models
     forest.fit(train_X, train_y)
-
-    # Compute the accuracy
     forest_pred = forest.predict(test_X)
     return accuracy_score(test_y, forest_pred)
 
 
+@info
 def random_forest_parameter_sweep(
     train_X,
     train_y,
     test_X,
     test_y,
+    score_depth,
+    score_split,
+    score_est,
+    best,
     depth_range=range(1, 10),
     min_samples_split_range=range(2, 10),
     n_estimators_range=range(1, 10),
+    debug_print=False,
 ):
     """
     Sweeps over the parameters max_depth, min_samples_split, and n_estimators
     """
-    score_depth, score_split, score_est = [], [], []
-    for depth in depth_range:
-        score_depth.append(
-            random_forest(train_X, train_y, test_X, test_y, max_depth=depth)
-        )
-        print(f"max_depth: {depth}, score: {score_depth[-1]}")
-    for split in min_samples_split_range:
-        score_split.append(
-            random_forest(train_X, train_y, test_X, test_y, min_samples_split=split)
-        )
-        print(f"min_samples_split: {split}, score: {score_split[-1]}")
-    for estimators in n_estimators_range:
-        score_est.append(
-            random_forest(train_X, train_y, test_X, test_y, n_estimators=estimators)
-        )
-        print(f"n_estimators: {estimators}, score: {score_est[-1]}")
-    top_depth = top_5(depth_range, score_depth)
-    top_split = top_5(min_samples_split_range, score_split)
-    top_est = top_5(n_estimators_range, score_est)
-    print(f"Top 5 max_depth: {top_depth}")
-    print(f"Top 5 min_samples_split: {top_split}")
-    print(f"Top 5 n_estimators: {top_est}")
 
-    # Rerun for all combinations of top 5
+    def list_comp(r, arg, return_value: List):
+        print(f"Sweeping {arg} in {r}")
+        ret = [
+            score
+            for _, score in itter(
+                train_X,
+                train_y,
+                test_X,
+                test_y,
+                r,
+                arg,
+                target_func=random_forest,
+            )
+        ]
+        return_value.extend(ret)
 
-    print("Checking all combinations of top 5...")
+    depth_thread = Thread(
+        target=list_comp,
+        args=(depth_range, "max_depth", score_depth),
+    )
+    split_thread = Thread(
+        target=list_comp,
+        args=(min_samples_split_range, "min_samples_split", score_split),
+    )
+    est_thread = Thread(
+        target=list_comp,
+        args=(n_estimators_range, "n_estimators", score_est),
+    )
+    depth_thread.start()
+    split_thread.start()
+    est_thread.start()
+    depth_thread.join()
+    split_thread.join()
+    est_thread.join()
+    top_depth = top(depth_range, score_depth)
+    top_split = top(min_samples_split_range, score_split)
+    top_est = top(n_estimators_range, score_est)
+
     scores = []
+    print("Validating combinations...")
     for depth, _ in top_depth:
         for split, _ in top_split:
             for est, _ in top_est:
                 scores.append(
                     (
-                        (depth, split, est),
+                        {"depth": depth, "split": split, "est": est},
                         random_forest(
                             train_X,
                             train_y,
@@ -267,16 +358,22 @@ def random_forest_parameter_sweep(
                         ),
                     )
                 )
+                print("Score: ", scores[-1][1])
 
-    def best(scores):
-        eval = lambda x: x[1] / (x[0][0] * x[0][1] * x[0][2])
+    def optimal(scores):
+        # We want to minimize the depth and estimators, but maximize the split and score
+
+        eval = lambda x: x[1] / (x[0]["depth"] * 10 + x[0]["split"] + x[0]["est"] * 5)
         return sorted(scores, key=eval, reverse=True)[0]
 
-    best = best(scores)
-    print(f"Best combination: {best}")
+    best.append(optimal(scores))
 
+    # We want to plot the scores, but not show them here just queue them up
     import matplotlib.pyplot as plt
 
+    """
+    # Make a new figure
+    plt.figure()
     plt.title("Random Forest parameter sweep")
     plt.ylabel("accuracy")
 
@@ -284,15 +381,135 @@ def random_forest_parameter_sweep(
     plt.plot(min_samples_split_range, score_split, label="min_samples_split")
     plt.plot(n_estimators_range, score_est, label="n_estimators")
     plt.legend()
-    plt.show()
+    """
+    return best
 
 
 if __name__ == "__main__":
+    from task1 import suppress_qt_warnings
+    from threading import Thread
+
+    suppress_qt_warnings()
     train, test = load_data()
-    random_forest_parameter_sweep(
+    k_range = range(5, 25)
+    knn_ret, tree_ret, forest_ret = (
+        ([[0 for _ in k_range] for _ in range(3)], []),
+        ([], [], [], []),
+        ([], [], [], []),
+    )
+    knn_parameters, tree_parameters, forest_parameters = (
+        [range(5, 25)],
+        [range(1, 30), range(2, 30), range(1, 30)],
+        [range(1, 50), range(2, 50), range(1, 50)],
+    )
+
+    # Start the threads,
+    threads = [
+        Thread(
+            target=knn_parameter_sweep,
+            args=(
+                *train,
+                *test,
+                *knn_ret,
+                *knn_parameters,
+            ),
+        ),
+        Thread(
+            target=tree_parameter_sweep,
+            args=(
+                *train,
+                *test,
+                *tree_ret,
+                *tree_parameters,
+            ),
+        ),
+        Thread(
+            target=random_forest_parameter_sweep,
+            args=(
+                *train,
+                *test,
+                *forest_ret,
+                *forest_parameters,
+            ),
+        ),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    # Plot the scores
+    # in 3 different figures
+
+    import matplotlib.pyplot as plt
+
+    plt.figure()
+    plt.title("KNN parameter sweep")
+    plt.ylabel("accuracy")
+    for i, score in enumerate(knn_ret[0]):
+        plt.plot(k_range, score, label=["euclidean", "manhattan", "minkowski"][i])
+
+    plt.legend()
+
+    plt.figure()
+    plt.title("Decision Tree parameter sweep")
+    plt.ylabel("accuracy")
+    plt.plot(range(1, 30), tree_ret[0], label="max_depth")
+    plt.plot(range(2, 30), tree_ret[1], label="min_samples_split")
+    plt.plot(range(1, 30), tree_ret[2], label="min_samples_leaf")
+    plt.legend()
+
+    plt.figure()
+    plt.title("Random Forest parameter sweep")
+    plt.ylabel("accuracy")
+    plt.plot(range(1, 50), forest_ret[0], label="max_depth")
+    plt.plot(range(2, 50), forest_ret[1], label="min_samples_split")
+    plt.plot(range(1, 50), forest_ret[2], label="n_estimators")
+    plt.legend()
+
+    plt.show()
+    with open("results.md", "w") as f:
+        f.write(
+            f"""
+# Results
+## KNN
+### Best parameters
+{str(knn_ret[1][0])}
+### Best score
+{knn_ret[1][1]}
+## Decision Tree
+### Best parameters
+{str(tree_ret[3][0])}
+### Best score
+{tree_ret[3][1]}
+## Random Forest
+### Best parameters
+{str(forest_ret[3][0])}
+### Best score
+{forest_ret[3][1]}
+"""
+        )
+    with open("result_table.tex", "w") as f:
+        f.write(
+            f"""
+\\begin{{tabular}}{{|l|l|l|l|}}
+\\hline
+\\textbf{{Classifier}} & \\textbf{{Max depth}} & \\textbf{{Min samples split}} & \\textbf{{Min samples leaf}} \\\\ \\hline
+KNN & {knn_ret[1][0]['k']} & {knn_ret[1][0]['metric']} & - \\\\ \\hline
+Decision Tree & {tree_ret[3][0]['depth']} & {tree_ret[3][0]['split']} & {tree_ret[3][0]['leaf']} \\\\ \\hline
+Random Forest & {forest_ret[3][0]['depth']} & {forest_ret[3][0]['split']} & {forest_ret[3][0]['est']} \\\\ \\hline
+\\end{{tabular}}
+"""
+        )
+    print("Done")
+
+    """    
+    tree_parameter_sweep(
         *train,
         *test,
-        depth_range=range(1, 50),
-        min_samples_split_range=range(2, 10),
-        n_estimators_range=range(1, 100),
+        depth_range=range(1, 30),
+        min_samples_leaf_range=range(1, 30),
+        min_samples_split_range=range(2, 30),
     )
+    random_forest_parameter_sweep(
+    )"""
