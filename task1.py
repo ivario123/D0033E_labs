@@ -410,6 +410,7 @@ def preprocess(csv: str, drop="gesture label", to_drop=None, corr_threshold=0.95
     and moving the skeleton to the origin (relative to the center of the body).
     Also removes all columns that have at least corr_threshold correlation with another column
     """
+    print(f"Preprocessing {csv}")
     df = pandas.read_csv(csv)
     if drop in df.columns:
         df = df.drop(drop, axis=1)

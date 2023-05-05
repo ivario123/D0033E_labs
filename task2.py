@@ -11,7 +11,35 @@ from sk_tree import DecisionTreeClassifier
 from task1 import preprocess
 import time
 from sklearn import svm
-NUM_SAMPLES = 5
+
+NUM_SAMPLES = 1
+
+
+def load_data(
+    test="./test-final.csv", train="./train-final.csv", corr_threshold=0.75
+) -> Tuple[Tuple[Any, Any], Tuple[Any, Any]]:
+    """
+    returns ((train_X, train_y), (test_X, test_y))
+    """
+    # Load the data
+    to_drop, df = preprocess(train, corr_threshold=corr_threshold)
+    # Drop the same columns
+    test_df = preprocess(test, to_drop=to_drop)  # Drop the same columns
+
+    # Check if the data is not the same
+    def eq(x, y):
+        for col in x.columns:
+            if col != "class":
+                yield (x[col].values == y[col].values).all()
+
+    assert not all(eq(df, test_df)), "Train and test data are the same"
+
+    # Split the data into x and y
+    train = df.iloc[:, :-1].values.tolist(), df.iloc[:, -1].values.tolist()
+
+    # Split the data into x and y
+    test = test_df.iloc[:, :-1].values.tolist(), test_df.iloc[:, -1].values.tolist()
+    return train, test
 
 
 def info(func: Callable):
@@ -79,24 +107,6 @@ def itter(
 top = lambda x, y: sorted(
     zip(x, y), key=lambda x: x[1][0] if type(x[1]) == list else x[1], reverse=True
 )[:3]
-
-
-def load_data(
-    test="./test-final.csv", train="test-final.csv", corr_threshold=0.75
-) -> Tuple[Tuple[Any, Any], Tuple[Any, Any]]:
-    """
-    returns ((train_X, train_y), (test_X, test_y))
-    """
-    # Load the data
-    to_drop, df = preprocess(train, corr_threshold=corr_threshold)
-    test_df = preprocess(test, to_drop=to_drop)  # Drop the same columns
-
-    # Split the data into x and y
-    train = df.iloc[:, :-1].values.tolist(), df.iloc[:, -1].values.tolist()
-
-    # Split the data into x and y
-    test = test_df.iloc[:, :-1].values.tolist(), test_df.iloc[:, -1].values.tolist()
-    return train, test
 
 
 def start_and_wait(threads: List[Thread]):
@@ -262,8 +272,6 @@ def tree_parameter_sweep(
                         ),
                     )
                 )
-    # Try only the best combinations
-
     combined_scores.append(
         (
             {"depth": top_depth[0][1], "split": 2, "leaf": 1},

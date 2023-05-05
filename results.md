@@ -12,7 +12,7 @@ k       = 5
 ### Best score
 
 ```python
-score   = 0.8611111111111112
+score   = 0.7
 ```
 
 ## Decision Tree
@@ -28,7 +28,7 @@ min_samples_leaf    = 1
 ### Best score
 
 ```python
-score              = 1.0
+score              = 0.6759259259259259
 actual depth       = 14
 ```
 
@@ -40,10 +40,13 @@ actual depth       = 14
 max_depth           = 18
 min_samples_split   = 9
 n_estimators        = 35 
+max_depth           = 33
+min_samples_split   = 7
+n_estimators        = 44 
 ```
 
 ### Best score
 
 ```python
-score               = 1.0
+score               = 0.9185185185185185
 ```
