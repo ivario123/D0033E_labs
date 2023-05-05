@@ -154,7 +154,6 @@ def svm_parameter_sweep(
     print(kernels)
 
     def compute(*args, **kwargs):
-        print(f"{kwargs=}")
         ret = svm_func(*args, **kwargs)
         return ret
 
