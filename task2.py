@@ -125,7 +125,7 @@ thread = lambda *args: start_and_wait(
 
 
 def svm_func(X, y, X_t, y_t,c):
-    clf = svm.LinearSVC(C=1.0, multi_class="ovr")
+    clf = svm.LinearSVC(C=c, multi_class="ovr",max_iter=5000)
     clf.fit(X, y)  # training data
     prediction = clf.predict(X_t)
     acc = accuracy_score(y_t, prediction)
@@ -142,7 +142,7 @@ def svm_parameter_sweep(
     c_range=range(5, 20),
 ):
 
-    scores.extend([svm_func(train_X,train_y,test_X,train_y,i) for i in c_range])
+    scores.extend([svm_func(train_X,train_y,test_X,train_y,i/5) for i in c_range])
     golf=np.amax(scores)
     best.append(({"c": c_range[scores.index(golf)]},golf))
     # Starta en del av rangen i en tråd, en i en annan 
@@ -479,7 +479,7 @@ def corr_test(corr_range: range = range(50, 100, 2)):
         [k_range],  # k
         [range(1, 30), range(2, 30), range(1, 30)],  # depth, split, leaf
         [range(1, 50), range(2, 50), range(1, 50)],  # depth, split, est
-        [range(1,25)],
+        [range(1,5)],
     )
     # * Add name of parameters here, one for each that you sweep over
     param_names = (
@@ -580,7 +580,7 @@ def corr_test(corr_range: range = range(50, 100, 2)):
             overall_best = [
                 x[-1][0] for x in rets
             ]  # Listcomprehension not strictly necessary, but it makes the code more readable imo
-            score_lookup = [lambda x: x[1], lambda x: x[1][0], lambda x: x[1]]
+            score_lookup = [lambda x: x[1], lambda x: x[1][0], lambda x: x[1],lambda x:x[1]]
             best = [
                 (label, score_lookup[i](score))
                 for i, (label, score) in enumerate(zip(func_names, overall_best))
