@@ -468,7 +468,7 @@ def random_forest_parameter_sweep(
 
 
 @info
-def corr_test(corr_range: range = range(98, 100, 2)):
+def corr_test(corr_range: range = range(60, 100, 2)):
     # Helper functions
 
     def fig(name):
@@ -529,7 +529,7 @@ def corr_test(corr_range: range = range(98, 100, 2)):
     )
     _, tree_parameters, forest_parameters, svm_parameters = params
 
-    for drop_below_spine in [True, False]:
+    for drop_below_spine in [False, False]:
         for corr in corr_range:
             print("\n" * 5)
             print(f"{OKGREEN}Correlation threshold: {corr}%{ENDC}")
@@ -621,7 +621,7 @@ def corr_test(corr_range: range = range(98, 100, 2)):
             ).dump(f"results_{corr}_{drop_below_spine}.md")
 
             # Save the best results
-
+            continue
             overall_best = [
                 x[-1][0] for x in rets
             ]  # Listcomprehension not strictly necessary, but it makes the code more readable imo
@@ -664,6 +664,7 @@ def corr_test(corr_range: range = range(98, 100, 2)):
                 c.append(score[1] if i != 1 else score[1][0])
 
             print("Done")
+    return
     import json
 
     # Dump the best results to a file
