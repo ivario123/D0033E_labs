@@ -13,6 +13,9 @@ import time
 from sklearn import svm
 
 NUM_SAMPLES = 1
+IMAGE_FOLDER = "./images"
+OKGREEN = "\033[92m"
+ENDC = "\033[0m"
 
 
 def load_data(
@@ -109,11 +112,16 @@ top = lambda x, y: sorted(
 )[:3]
 
 
-def start_and_wait(threads: List[Thread]):
+def start_and_wait(*threads: Thread):
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
+
+
+thread = lambda *args: start_and_wait(
+    *[Thread(target=target, args=args) for target, args in args]
+)
 
 
 def svm_func(X, y, X_t, y_t):
@@ -164,7 +172,7 @@ def knn_parameter_sweep(
 
     enums = split_enum(enum, number_of_threads)
     start_and_wait(
-        [
+        *[
             Thread(target=itter_int, args=(enums[i], scores))
             for i in range(number_of_threads)
         ]
@@ -230,21 +238,10 @@ def tree_parameter_sweep(
         ]
         return_value.extend(ret)
 
-    start_and_wait(
-        [
-            Thread(
-                target=listcomp,
-                args=(depth_range, "max_depth", scores_depth),
-            ),
-            Thread(
-                target=listcomp,
-                args=(min_samples_split_range, "min_samples_split", scores_split),
-            ),
-            Thread(
-                target=listcomp,
-                args=(min_samples_leaf_range, "min_samples_leaf", scores_leaf),
-            ),
-        ]
+    thread(
+        (listcomp, (depth_range, "max_depth", scores_depth)),
+        (listcomp, (min_samples_split_range, "min_samples_split", scores_split)),
+        (listcomp, (min_samples_leaf_range, "min_samples_leaf", scores_leaf)),
     )
 
     # Find top 5 scores
@@ -373,21 +370,10 @@ def random_forest_parameter_sweep(
         ]
         return_value.extend(ret)
 
-    start_and_wait(
-        [
-            Thread(
-                target=list_comp,
-                args=(depth_range, "max_depth", score_depth),
-            ),
-            Thread(
-                target=list_comp,
-                args=(min_samples_split_range, "min_samples_split", score_split),
-            ),
-            Thread(
-                target=list_comp,
-                args=(n_estimators_range, "n_estimators", score_est),
-            ),
-        ]
+    thread(
+        (list_comp, (depth_range, "max_depth", score_depth)),
+        (list_comp, (min_samples_split_range, "min_samples_split", score_split)),
+        (list_comp, (n_estimators_range, "n_estimators", score_est)),
     )
 
     top_depth = top(depth_range, score_depth)
@@ -427,30 +413,66 @@ def random_forest_parameter_sweep(
     print(f"Best random forest parameters: {best}")
 
 
-def corr_test(corr_range: range = range(50, 95, 2)):
-    # Plot the results
+@info
+def corr_test(corr_range: range = range(50, 100, 2)):
+    # Helper functions
+
     def fig(name):
+        """
+        Makes a new figure and gives it a title and y label
+        """
         plt.figure(name)
         plt.title(name)
         plt.ylabel("accuracy")
 
     def end_fig(name, corr, drop_below_spine=""):
+        """
+        Adds a legend and saves the figure
+        """
         plt.legend()
         plt.savefig(
-            image_folder
+            IMAGE_FOLDER
             + f"/{name}_{NUM_SAMPLES}_{int(corr*100)}%_{drop_below_spine}.png"
         )
 
-    OKGREEN = "\033[92m"
-    ENDC = "\033[0m"
-    best_results = {
-        "knn": {"acc": float("-inf"), "params": [], "corr": 0, "legs": False},
-        "tree": {"acc": float("-inf"), "params": [], "corr": 0, "legs": False},
-        "forest": {"acc": float("-inf"), "params": [], "corr": 0, "legs": False},
-    }
-    corr_effect_with_legs = [[], [], []]
-    corr_effect_without_legs = [[], [], []]
-    for drop_below_spine in [True,False]:
+    t = lambda f, ret, param: Thread(target=f, args=(*train, *test, *ret, *param))
+
+    # * Add (function_name, string_repr) here for each function you want to sweep over
+    funcs, func_names = list(
+        zip(
+            *[
+                (knn_parameter_sweep, "knn"),
+                (tree_parameter_sweep, "tree"),
+                (random_forest_parameter_sweep, "forest"),
+            ]
+        )
+    )
+
+    # Global outputs
+    best_results = {}
+    #
+    corr_effect_with_legs, corr_effect_without_legs = (
+        [[] for _ in range(len(func_names))]
+        for _ in range(2)  # One for each function and one for each drop_below_spine
+    )
+
+    # Parameter definitions
+    k_range = range(5, 25)
+    # * Add parameters here, one for each that you sweep over
+    params = (
+        [k_range],  # k
+        [range(1, 30), range(2, 30), range(1, 30)],  # depth, split, leaf
+        [range(1, 50), range(2, 50), range(1, 50)],  # depth, split, est
+    )
+    # * Add name of parameters here, one for each that you sweep over
+    param_names = (
+        ["k"],
+        ["depth", "min_samples_split", "min_samples_leaf"],
+        ["depth", "min_samples_split", "n_estimators"],
+    )
+    _, tree_parameters, forest_parameters = params
+
+    for drop_below_spine in [True, False]:
         for corr in corr_range:
             print("\n" * 5)
             print(f"{OKGREEN}Correlation threshold: {corr}%{ENDC}")
@@ -463,33 +485,33 @@ def corr_test(corr_range: range = range(50, 95, 2)):
             acc = svm_func(*train, *test)
             print(f"Accuracy SVM: {acc:.5f}")
 
-            # exit()
-            # Define input and output parameters
-            k_range = range(5, 25)
+            # define result arrays
+            # * Add output arrays here, one for each output and one for the best combination
             knn_ret, tree_ret, forest_ret = (
                 ([[0 for _ in k_range] for _ in range(2)], []),
                 ([], [], [], []),
                 ([], [], [], []),
             )
-            knn_parameters, tree_parameters, forest_parameters = (
-                [k_range],  # k
-                [range(1, 30), range(2, 30), range(1, 30)],  # depth, split, leaf
-                [range(1, 50), range(2, 50), range(1, 50)],  # depth, split, est
-            )
-            t = lambda f, ret, param: Thread(
-                target=f, args=(*train, *test, *ret, *param)
-            )
-            # Start the threads, one for each algorithm
-            start_and_wait(
-                [
-                    #  t(svm_func,svm_ret,svm_parameters),
-                    t(knn_parameter_sweep, knn_ret, knn_parameters),
-                    t(tree_parameter_sweep, tree_ret, tree_parameters),
-                    t(random_forest_parameter_sweep, forest_ret, forest_parameters),
-                ]
-            )
-            image_folder = "./images"
+            # * Add functions to thread list
+            # Since pythons alias system is strange we can't do this in a generic way
+            threads = [
+                t(funcs[0], knn_ret, params[0]),
+                t(funcs[1], tree_ret, params[1]),
+                t(funcs[2], forest_ret, params[2]),
+            ]
 
+            # Start the threads, one for each algorithm
+            start_and_wait(*threads)
+            # * Add results here, one for each function
+            # This can't be done generically because of the aliasing system
+            rets = [knn_ret, tree_ret, forest_ret]
+
+            # Plot lambda function to clean up the code
+            plot = lambda params, acc, label, r: [
+                plt.plot(params[i], acc[i], label=label[i]) for i in r
+            ]
+
+            # * Add plots here, one for each function
             fig("KNN parameter sweep")
             plt.xlabel("k")
             for i, score in enumerate(knn_ret[0]):
@@ -497,24 +519,25 @@ def corr_test(corr_range: range = range(50, 95, 2)):
             end_fig("knn", corr, drop_below_spine)
 
             fig("Decision Tree parameter sweep")
-            strip = lambda x: [i[0] for i in x]
-            for i in range(len(tree_parameters)):
-                plt.plot(
-                    tree_parameters[i],
-                    strip(tree_ret[i]),
-                    label=["depth", "split", "leaf"][i],
-                )
-            end_fig("tree", corr, drop_below_spine)
+            strip = lambda x: [[i[0] for i in x] for x in x]
+            plot(
+                tree_parameters,
+                strip(tree_ret),
+                param_names[1],
+                range(len(tree_parameters)),
+            )
+            end_fig(func_names[1], corr, drop_below_spine)
 
             fig("Random Forest parameter sweep")
-            for i in range(len(forest_parameters)):
-                plt.plot(
-                    forest_parameters[i],
-                    forest_ret[i],
-                    label=["depth", "split", "est"][i],
-                )
-            end_fig("forest", corr, drop_below_spine)
+            plot(
+                forest_parameters,
+                forest_ret,
+                param_names[2],
+                range(len(forest_parameters)),
+            )
+            end_fig(func_names[2], corr, drop_below_spine)
             plt.close("all")
+
             # Write the results to a file
             env = Environment(loader=FileSystemLoader("."))
             template = env.get_template("result_template.md.jinja")
@@ -525,39 +548,38 @@ def corr_test(corr_range: range = range(50, 95, 2)):
             ).dump(f"results_{corr}_{drop_below_spine}.md")
 
             # Save the best results
-            # KNN
-            knn_best = knn_ret[-1][0]
-            if knn_best[1] > best_results["knn"]["acc"]:
-                best_results["knn"] = {
-                    "acc": knn_best[1],
-                    "corr": corr,
-                    "params": knn_best[0],
-                    "legs": drop_below_spine,
-                }
-            # Decision Tree
-            tree_best = tree_ret[-1][0]
-            if tree_best[1][0] > best_results["tree"]["acc"]:
-                best_results["tree"] = {
-                    "acc": tree_best[1][0],
-                    "corr": corr,
-                    "params": tree_best[0],
-                    "legs": drop_below_spine,
-                }
-            # Random Forest
-            forest_best = forest_ret[-1][0]
-            if forest_best[1] > best_results["forest"]["acc"]:
-                best_results["forest"] = {
-                    "acc": forest_best[1],
-                    "corr": corr,
-                    "params": forest_best[0],
-                    "legs": drop_below_spine,
-                }
+            overall_best = [
+                x[-1][0] for x in rets
+            ]  # Listcomprehension not strictly necessary, but it makes the code more readable imo
+            score_lookup = [lambda x: x[1], lambda x: x[1][0], lambda x: x[1]]
+            best = [
+                (label, score_lookup[i](score))
+                for i, (label, score) in enumerate(zip(func_names, overall_best))
+            ]
+            # Store the best results
+            for i, (label, score) in enumerate(best):
+                if label not in best_results.keys():
+                    best_results[label] = {
+                        "acc": score,
+                        "corr": corr,
+                        "params": overall_best[i][0],
+                        "legs": drop_below_spine,
+                    }
+                elif score > best_results[label]["acc"]:
+                    best_results[label] = {
+                        "acc": score,
+                        "corr": corr,
+                        "params": overall_best[i][0],
+                        "legs": drop_below_spine,
+                    }
+
+            # Store in the appropriate arrays
             for i, (c, score) in enumerate(
                 zip(
                     corr_effect_with_legs
                     if drop_below_spine
                     else corr_effect_without_legs,
-                    [knn_best, tree_best, forest_best],
+                    overall_best,
                 )
             ):
                 c.append(score[1] if i != 1 else score[1][0])
@@ -565,16 +587,24 @@ def corr_test(corr_range: range = range(50, 95, 2)):
             print("Done")
     import json
 
+    # Dump the best results to a file
     with open("best_results.json", "w") as f:
         json.dump(best_results, f)
+
+    # Plot the results for the correlation effect
     fig("Correlation effect")
     plt.xlabel("Correlation threshold")
-    plt.plot(corr_range, corr_effect_with_legs[0], label="KNN_legs")
-    plt.plot(corr_range, corr_effect_with_legs[1], label="Decision Tree_legs")
-    plt.plot(corr_range, corr_effect_with_legs[2], label="Random Forest_legs")
-    plt.plot(corr_range, corr_effect_without_legs[0], label="KNN_no legs")
-    plt.plot(corr_range, corr_effect_without_legs[1], label="Decision Tree_no legs")
-    plt.plot(corr_range, corr_effect_without_legs[2], label="Random Forest_no legs")
+    plot_similar = lambda accs, labels: [
+        plt.plot(corr_range, accs[i], label=labels[i]) for i in range(len(accs))
+    ]
+    plot_similar(
+        corr_effect_with_legs,
+        [x.upper() + " with legs" for x in func_names],
+    )
+    plot_similar(
+        corr_effect_without_legs,
+        [x.upper() + " without legs" for x in func_names],
+    )
     end_fig("corr_effect", 0)
     plt.show()
 
