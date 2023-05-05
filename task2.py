@@ -5,7 +5,10 @@ from pandas import DataFrame as df
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
-
+from sklearn.svm import NuSVC
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import classification_report
 from knn import EUCLIDEAN
 from sk_tree import DecisionTreeClassifier
 from task1 import preprocess
@@ -123,11 +126,13 @@ thread = lambda *args: start_and_wait(
     *[Thread(target=target, args=args) for target, args in args]
 )
 
-
-def svm_func(X, y, X_t, y_t,c):
-    clf = svm.LinearSVC(C=c, multi_class="ovr",max_iter=5000)
-    clf.fit(X, y)  # training data
-    prediction = clf.predict(X_t)
+def svm_func(X, y, X_t, y_t,**kwargs):
+    svm = NuSVC(**kwargs)#kernel='rbf', gamma='scale')
+    svm.fit(X, y)
+    
+    #clf = svm.NuSVC(C=c, multi_class="ovr",max_iter=5000)
+    #clf.fit(X, y)  # training data
+    prediction = svm.predict(X_t)
     acc = accuracy_score(y_t, prediction)
     return acc
 
@@ -138,13 +143,36 @@ def svm_parameter_sweep(
     test_X,
     test_y,
     scores,
+    randome,
     best,
-    c_range=range(5, 20),
+    gamma=range(3,15),
+    kernels=["linear","poly","rbf","sigmoid"],
+    #c_range=range(5, 20),
 ):
+    print(kernels)
+    def compute(*args,**kwargs):
+        ret = svm_func(*args,**kwargs)
+        print(ret)
+        return ret
+    
+    tmp_scores={}
+    for k in kernels:    
+        tmp_scores[k] = [compute(train_X, train_y, test_X, test_y,gamma=g,kernel = k) for g in gamma]
+    scores.append(tmp_scores)
+    top = ({"kernel":"","gamma":0},float(-inf))
+    for k in kernels:
+        if max(tmp_scores[k]) > top[3]:
+            top = ({"k":k,"gamma":gamma[tmp_scores.index(max(tmp_scores[k]))]},max(tmp_scores[k]))
+    best.append(top)
+    print(scores, "hadhfasjfjdasfjahshdfjadhfhasdjajfjadsjfhl")
+  #  gamma_scores.extend([compute(train_X, train_y, test_X, test_y,gamma=g) for g in gamma])
+  #  kernel_scores.extend([compute(train_X, train_y, test_X, test_y,kernel=k) for k in kernels])
+    #scores.extend([svm_func(train_X,train_y,test_X,train_y,i) for i in c_range])
+  #  golf=np.amax(gamma_scores)
+  #  golf2=np.amax(kernel_scores)
+  #  best.append((({"gamma": gamma[gamma_scores.index(golf)]},golf),({"kernel": kernels[kernel_scores.index(golf2)]},golf2)))
 
-    scores.extend([svm_func(train_X,train_y,test_X,train_y,i/5) for i in c_range])
-    golf=np.amax(scores)
-    best.append(({"c": c_range[scores.index(golf)]},golf))
+   # best.append(({"gamma": c_range[gamma_scores.index(golf)]},golf))
     # Starta en del av rangen i en tråd, en i en annan 
 
 def knn(train_X, train_y, test_X, test_y, n_neighbors=5, distance_measure=EUCLIDEAN):
@@ -479,14 +507,14 @@ def corr_test(corr_range: range = range(50, 100, 2)):
         [k_range],  # k
         [range(1, 30), range(2, 30), range(1, 30)],  # depth, split, leaf
         [range(1, 50), range(2, 50), range(1, 50)],  # depth, split, est
-        [range(1,5)],
+        [ ["linear","poly","rbf","sigmoid"], range(3,15)],
     )
     # * Add name of parameters here, one for each that you sweep over
     param_names = (
         ["k"],
         ["depth", "min_samples_split", "min_samples_leaf"],
         ["depth", "min_samples_split", "n_estimators"],
-        ["c"],
+        ["kernel","gamma"],
     )
     _, tree_parameters, forest_parameters,svm_parameters = params
 
@@ -557,15 +585,39 @@ def corr_test(corr_range: range = range(50, 100, 2)):
             )
             end_fig(func_names[2], corr, drop_below_spine)
             #plt.close("all")
-
+            print(svm_ret)
+            linear_score,poly_score,rbf_score,sigmoid_score = svm_ret[0]["linear"],svm_ret[0]["poly"],svm_ret[0]["rbf"],svm_ret[0]["sigmoid"]
             fig("SVM sweep")
             plot(
                 svm_parameters,
-                svm_ret,
-                param_names[3],
+                linear_score,
+                "kernel=linear",
+                #param_names[3],
+                range(len(svm_parameters)),
+            )
+            
+            plot(
+                svm_parameters,
+                poly_score,
+                "kernel=poly",
+                range(len(svm_parameters)),
+            )
+            
+            plot(
+                svm_parameters,
+                rbf_score,
+                "kernel=rbf",
+                range(len(svm_parameters)),
+            )
+            
+            plot(
+                svm_parameters,
+                sigmoid_score,
+                "kernel=sigmoid",
                 range(len(svm_parameters)),
             )
             end_fig(func_names[3],corr,drop_below_spine)
+        
             plt.close("all")
             # Write the results to a file
             env = Environment(loader=FileSystemLoader("."))
