@@ -126,15 +126,17 @@ thread = lambda *args: start_and_wait(
     *[Thread(target=target, args=args) for target, args in args]
 )
 
-def svm_func(X, y, X_t, y_t,**kwargs):
-    svm = NuSVC(**kwargs)#kernel='rbf', gamma='scale')
+
+def svm_func(X, y, X_t, y_t, **kwargs):
+    svm = NuSVC(**kwargs)  # kernel='rbf', gamma='scale')
     svm.fit(X, y)
-    
-    #clf = svm.NuSVC(C=c, multi_class="ovr",max_iter=5000)
-    #clf.fit(X, y)  # training data
+
+    # clf = svm.NuSVC(C=c, multi_class="ovr",max_iter=5000)
+    # clf.fit(X, y)  # training data
     prediction = svm.predict(X_t)
     acc = accuracy_score(y_t, prediction)
     return acc
+
 
 @info
 def svm_parameter_sweep(
@@ -145,35 +147,44 @@ def svm_parameter_sweep(
     scores,
     randome,
     best,
-    gamma=range(3,15),
-    kernels=["linear","poly","rbf","sigmoid"],
-    #c_range=range(5, 20),
+    gamma=range(3, 15),
+    kernels=["linear", "poly", "rbf"],
+    # c_range=range(5, 20),
 ):
     print(kernels)
-    def compute(*args,**kwargs):
-        ret = svm_func(*args,**kwargs)
-        print(ret)
-        return ret
-    
-    tmp_scores={}
-    for k in kernels:    
-        tmp_scores[k] = [compute(train_X, train_y, test_X, test_y,gamma=g,kernel = k) for g in gamma]
-    scores.append(tmp_scores)
-    top = ({"kernel":"","gamma":0},float(-inf))
-    for k in kernels:
-        if max(tmp_scores[k]) > top[3]:
-            top = ({"k":k,"gamma":gamma[tmp_scores.index(max(tmp_scores[k]))]},max(tmp_scores[k]))
-    best.append(top)
-    print(scores, "hadhfasjfjdasfjahshdfjadhfhasdjajfjadsjfhl")
-  #  gamma_scores.extend([compute(train_X, train_y, test_X, test_y,gamma=g) for g in gamma])
-  #  kernel_scores.extend([compute(train_X, train_y, test_X, test_y,kernel=k) for k in kernels])
-    #scores.extend([svm_func(train_X,train_y,test_X,train_y,i) for i in c_range])
-  #  golf=np.amax(gamma_scores)
-  #  golf2=np.amax(kernel_scores)
-  #  best.append((({"gamma": gamma[gamma_scores.index(golf)]},golf),({"kernel": kernels[kernel_scores.index(golf2)]},golf2)))
 
-   # best.append(({"gamma": c_range[gamma_scores.index(golf)]},golf))
-    # Starta en del av rangen i en tråd, en i en annan 
+    def compute(*args, **kwargs):
+        print(f"{kwargs=}")
+        ret = svm_func(*args, **kwargs)
+        return ret
+
+    tmp_scores = {}
+    for k in kernels:
+        tmp_scores[k] = [
+            compute(train_X, train_y, test_X, test_y, gamma=g, kernel=k) for g in gamma
+        ]
+    scores.append(tmp_scores)
+    top = ({"kernel": "", "gamma": 0}, float("-inf"))
+    for k in kernels:
+        if max(tmp_scores[k]) > top[1]:
+            top = (
+                {"k": k, "gamma": gamma[tmp_scores[k].index(max(tmp_scores[k]))]},
+                max(tmp_scores[k]),
+            )
+    best.append(top)
+    print(f"{top=}")
+
+
+#  gamma_scores.extend([compute(train_X, train_y, test_X, test_y,gamma=g) for g in gamma])
+#  kernel_scores.extend([compute(train_X, train_y, test_X, test_y,kernel=k) for k in kernels])
+# scores.extend([svm_func(train_X,train_y,test_X,train_y,i) for i in c_range])
+#  golf=np.amax(gamma_scores)
+#  golf2=np.amax(kernel_scores)
+#  best.append((({"gamma": gamma[gamma_scores.index(golf)]},golf),({"kernel": kernels[kernel_scores.index(golf2)]},golf2)))
+
+# best.append(({"gamma": c_range[gamma_scores.index(golf)]},golf))
+# Starta en del av rangen i en tråd, en i en annan
+
 
 def knn(train_X, train_y, test_X, test_y, n_neighbors=5, distance_measure=EUCLIDEAN):
     knn = KNeighborsClassifier(n_neighbors=n_neighbors, metric=distance_measure)
@@ -457,7 +468,7 @@ def random_forest_parameter_sweep(
 
 
 @info
-def corr_test(corr_range: range = range(50, 100, 2)):
+def corr_test(corr_range: range = range(98, 100, 2)):
     # Helper functions
 
     def fig(name):
@@ -487,7 +498,7 @@ def corr_test(corr_range: range = range(50, 100, 2)):
                 (knn_parameter_sweep, "knn"),
                 (tree_parameter_sweep, "tree"),
                 (random_forest_parameter_sweep, "forest"),
-                (svm_parameter_sweep,"svm"),
+                (svm_parameter_sweep, "svm"),
             ]
         )
     )
@@ -507,16 +518,16 @@ def corr_test(corr_range: range = range(50, 100, 2)):
         [k_range],  # k
         [range(1, 30), range(2, 30), range(1, 30)],  # depth, split, leaf
         [range(1, 50), range(2, 50), range(1, 50)],  # depth, split, est
-        [ ["linear","poly","rbf","sigmoid"], range(3,15)],
+        [["linear", "poly", "rbf"], range(3, 15)],
     )
     # * Add name of parameters here, one for each that you sweep over
     param_names = (
         ["k"],
         ["depth", "min_samples_split", "min_samples_leaf"],
         ["depth", "min_samples_split", "n_estimators"],
-        ["kernel","gamma"],
+        ["kernel", "gamma"],
     )
-    _, tree_parameters, forest_parameters,svm_parameters = params
+    _, tree_parameters, forest_parameters, svm_parameters = params
 
     for drop_below_spine in [True, False]:
         for corr in corr_range:
@@ -528,16 +539,16 @@ def corr_test(corr_range: range = range(50, 100, 2)):
             train, test = load_data(
                 corr_threshold=corr, drop_below_spine=drop_below_spine
             )
-        #    acc = svm_func(*train, *test)
-        #    print(f"Accuracy SVM: {acc:.5f}")
+            #    acc = svm_func(*train, *test)
+            #    print(f"Accuracy SVM: {acc:.5f}")
 
             # define result arrays
             # * Add output arrays here, one for each output and one for the best combination
-            knn_ret, tree_ret, forest_ret, svm_ret= (
+            knn_ret, tree_ret, forest_ret, svm_ret = (
                 ([[0 for _ in k_range] for _ in range(2)], []),
                 ([], [], [], []),
                 ([], [], [], []),
-                ([],[])
+                ([], []),
             )
             # * Add functions to thread list
             # Since pythons alias system is strange we can't do this in a generic way
@@ -545,14 +556,14 @@ def corr_test(corr_range: range = range(50, 100, 2)):
                 t(funcs[0], knn_ret, params[0]),
                 t(funcs[1], tree_ret, params[1]),
                 t(funcs[2], forest_ret, params[2]),
-                t(funcs[3], svm_ret,params[3])
+                t(funcs[3], svm_ret, params[3]),
             ]
 
             # Start the threads, one for each algorithm
             start_and_wait(*threads)
             # * Add results here, one for each function
             # This can't be done generically because of the aliasing system
-            rets = [knn_ret, tree_ret, forest_ret,svm_ret]
+            rets = [knn_ret, tree_ret, forest_ret, svm_ret]
 
             # Plot lambda function to clean up the code
             plot = lambda params, acc, label, r: [
@@ -584,40 +595,21 @@ def corr_test(corr_range: range = range(50, 100, 2)):
                 range(len(forest_parameters)),
             )
             end_fig(func_names[2], corr, drop_below_spine)
-            #plt.close("all")
-            print(svm_ret)
-            linear_score,poly_score,rbf_score,sigmoid_score = svm_ret[0]["linear"],svm_ret[0]["poly"],svm_ret[0]["rbf"],svm_ret[0]["sigmoid"]
+            # plt.close("all")
+            tmp = svm_ret[0][0]
+            lin,pol,rbf = [
+                tmp["linear"],
+                tmp["poly"],
+                tmp["rbf"],
+            ]
             fig("SVM sweep")
-            plot(
-                svm_parameters,
-                linear_score,
-                "kernel=linear",
-                #param_names[3],
-                range(len(svm_parameters)),
-            )
-            
-            plot(
-                svm_parameters,
-                poly_score,
-                "kernel=poly",
-                range(len(svm_parameters)),
-            )
-            
-            plot(
-                svm_parameters,
-                rbf_score,
-                "kernel=rbf",
-                range(len(svm_parameters)),
-            )
-            
-            plot(
-                svm_parameters,
-                sigmoid_score,
-                "kernel=sigmoid",
-                range(len(svm_parameters)),
-            )
-            end_fig(func_names[3],corr,drop_below_spine)
-        
+
+            plt.plot(svm_parameters[-1], lin, label="linear")
+            plt.plot(svm_parameters[-1], pol, label="poly")
+            plt.plot(svm_parameters[-1], rbf, label="rbf")
+
+            end_fig(func_names[3], corr, drop_below_spine)
+
             plt.close("all")
             # Write the results to a file
             env = Environment(loader=FileSystemLoader("."))
@@ -629,10 +621,16 @@ def corr_test(corr_range: range = range(50, 100, 2)):
             ).dump(f"results_{corr}_{drop_below_spine}.md")
 
             # Save the best results
+
             overall_best = [
                 x[-1][0] for x in rets
             ]  # Listcomprehension not strictly necessary, but it makes the code more readable imo
-            score_lookup = [lambda x: x[1], lambda x: x[1][0], lambda x: x[1],lambda x:x[1]]
+            score_lookup = [
+                lambda x: x[1],
+                lambda x: x[1][0],
+                lambda x: x[1],
+                lambda x: x[1],
+            ]
             best = [
                 (label, score_lookup[i](score))
                 for i, (label, score) in enumerate(zip(func_names, overall_best))
