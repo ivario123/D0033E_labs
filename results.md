@@ -28,7 +28,7 @@ min_samples_leaf    = 1
 ### Best score
 
 ```python
-score              = 0.6759259259259259
+score              = 0.6888888888888889
 actual depth       = 14
 ```
 
@@ -37,16 +37,13 @@ actual depth       = 14
 ### Best parameters
 
 ```python
-max_depth           = 18
-min_samples_split   = 9
-n_estimators        = 35 
-max_depth           = 33
-min_samples_split   = 7
-n_estimators        = 44 
+max_depth           = 14
+min_samples_split   = 11
+n_estimators        = 47 
 ```
 
 ### Best score
 
 ```python
-score               = 0.9185185185185185
+score               = 0.9037037037037037
 ```

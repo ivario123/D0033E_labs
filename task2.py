@@ -16,15 +16,15 @@ NUM_SAMPLES = 1
 
 
 def load_data(
-    test="./test-final.csv", train="./train-final.csv", corr_threshold=0.75
+    test="./test-final.csv", train="./train-final.csv", corr_threshold=0.75, **kwargs
 ) -> Tuple[Tuple[Any, Any], Tuple[Any, Any]]:
     """
     returns ((train_X, train_y), (test_X, test_y))
     """
     # Load the data
-    to_drop, df = preprocess(train, corr_threshold=corr_threshold)
+    to_drop, df = preprocess(train, corr_threshold=corr_threshold, **kwargs)
     # Drop the same columns
-    test_df = preprocess(test, to_drop=to_drop)  # Drop the same columns
+    test_df = preprocess(test, to_drop=to_drop, **kwargs)  # Drop the same columns
 
     # Check if the data is not the same
     def eq(x, y):
@@ -116,14 +116,12 @@ def start_and_wait(threads: List[Thread]):
         thread.join()
 
 
-def svm_func(X,y,X_t,y_t):
-    clf=svm.LinearSVC(C=1.0,multi_class='ovr')
-    clf.fit(X,y) #training data
-    prediction=clf.predict(X_t)
-    acc=accuracy_score(y_t,prediction)
+def svm_func(X, y, X_t, y_t):
+    clf = svm.LinearSVC(C=1.0, multi_class="ovr")
+    clf.fit(X, y)  # training data
+    prediction = clf.predict(X_t)
+    acc = accuracy_score(y_t, prediction)
     return acc
-
-    
 
 
 def knn(train_X, train_y, test_X, test_y, n_neighbors=5, distance_measure=EUCLIDEAN):
@@ -429,6 +427,158 @@ def random_forest_parameter_sweep(
     print(f"Best random forest parameters: {best}")
 
 
+def corr_test(corr_range: range = range(50, 95, 2)):
+    # Plot the results
+    def fig(name):
+        plt.figure(name)
+        plt.title(name)
+        plt.ylabel("accuracy")
+
+    def end_fig(name, corr, drop_below_spine=""):
+        plt.legend()
+        plt.savefig(
+            image_folder
+            + f"/{name}_{NUM_SAMPLES}_{int(corr*100)}%_{drop_below_spine}.png"
+        )
+
+    OKGREEN = "\033[92m"
+    ENDC = "\033[0m"
+    best_results = {
+        "knn": {"acc": float("-inf"), "params": [], "corr": 0, "legs": False},
+        "tree": {"acc": float("-inf"), "params": [], "corr": 0, "legs": False},
+        "forest": {"acc": float("-inf"), "params": [], "corr": 0, "legs": False},
+    }
+    corr_effect_with_legs = [[], [], []]
+    corr_effect_without_legs = [[], [], []]
+    for drop_below_spine in [True,False]:
+        for corr in corr_range:
+            print("\n" * 5)
+            print(f"{OKGREEN}Correlation threshold: {corr}%{ENDC}")
+            print("\n" * 5)
+            corr = corr / 100
+            # Retrieve the data from the csv files and preprocess them
+            train, test = load_data(
+                corr_threshold=corr, drop_below_spine=drop_below_spine
+            )
+            acc = svm_func(*train, *test)
+            print(f"Accuracy SVM: {acc:.5f}")
+
+            # exit()
+            # Define input and output parameters
+            k_range = range(5, 25)
+            knn_ret, tree_ret, forest_ret = (
+                ([[0 for _ in k_range] for _ in range(2)], []),
+                ([], [], [], []),
+                ([], [], [], []),
+            )
+            knn_parameters, tree_parameters, forest_parameters = (
+                [k_range],  # k
+                [range(1, 30), range(2, 30), range(1, 30)],  # depth, split, leaf
+                [range(1, 50), range(2, 50), range(1, 50)],  # depth, split, est
+            )
+            t = lambda f, ret, param: Thread(
+                target=f, args=(*train, *test, *ret, *param)
+            )
+            # Start the threads, one for each algorithm
+            start_and_wait(
+                [
+                    #  t(svm_func,svm_ret,svm_parameters),
+                    t(knn_parameter_sweep, knn_ret, knn_parameters),
+                    t(tree_parameter_sweep, tree_ret, tree_parameters),
+                    t(random_forest_parameter_sweep, forest_ret, forest_parameters),
+                ]
+            )
+            image_folder = "./images"
+
+            fig("KNN parameter sweep")
+            plt.xlabel("k")
+            for i, score in enumerate(knn_ret[0]):
+                plt.plot(k_range, score, label=["euclidean", "manhattan"][i])
+            end_fig("knn", corr, drop_below_spine)
+
+            fig("Decision Tree parameter sweep")
+            strip = lambda x: [i[0] for i in x]
+            for i in range(len(tree_parameters)):
+                plt.plot(
+                    tree_parameters[i],
+                    strip(tree_ret[i]),
+                    label=["depth", "split", "leaf"][i],
+                )
+            end_fig("tree", corr, drop_below_spine)
+
+            fig("Random Forest parameter sweep")
+            for i in range(len(forest_parameters)):
+                plt.plot(
+                    forest_parameters[i],
+                    forest_ret[i],
+                    label=["depth", "split", "est"][i],
+                )
+            end_fig("forest", corr, drop_below_spine)
+            plt.close("all")
+            # Write the results to a file
+            env = Environment(loader=FileSystemLoader("."))
+            template = env.get_template("result_template.md.jinja")
+            template.stream(
+                tree_ret=tree_ret,
+                knn_ret=knn_ret,
+                forest_ret=forest_ret,
+            ).dump(f"results_{corr}_{drop_below_spine}.md")
+
+            # Save the best results
+            # KNN
+            knn_best = knn_ret[-1][0]
+            if knn_best[1] > best_results["knn"]["acc"]:
+                best_results["knn"] = {
+                    "acc": knn_best[1],
+                    "corr": corr,
+                    "params": knn_best[0],
+                    "legs": drop_below_spine,
+                }
+            # Decision Tree
+            tree_best = tree_ret[-1][0]
+            if tree_best[1][0] > best_results["tree"]["acc"]:
+                best_results["tree"] = {
+                    "acc": tree_best[1][0],
+                    "corr": corr,
+                    "params": tree_best[0],
+                    "legs": drop_below_spine,
+                }
+            # Random Forest
+            forest_best = forest_ret[-1][0]
+            if forest_best[1] > best_results["forest"]["acc"]:
+                best_results["forest"] = {
+                    "acc": forest_best[1],
+                    "corr": corr,
+                    "params": forest_best[0],
+                    "legs": drop_below_spine,
+                }
+            for i, (c, score) in enumerate(
+                zip(
+                    corr_effect_with_legs
+                    if drop_below_spine
+                    else corr_effect_without_legs,
+                    [knn_best, tree_best, forest_best],
+                )
+            ):
+                c.append(score[1] if i != 1 else score[1][0])
+
+            print("Done")
+    import json
+
+    with open("best_results.json", "w") as f:
+        json.dump(best_results, f)
+    fig("Correlation effect")
+    plt.xlabel("Correlation threshold")
+    plt.plot(corr_range, corr_effect_with_legs[0], label="KNN_legs")
+    plt.plot(corr_range, corr_effect_with_legs[1], label="Decision Tree_legs")
+    plt.plot(corr_range, corr_effect_with_legs[2], label="Random Forest_legs")
+    plt.plot(corr_range, corr_effect_without_legs[0], label="KNN_no legs")
+    plt.plot(corr_range, corr_effect_without_legs[1], label="Decision Tree_no legs")
+    plt.plot(corr_range, corr_effect_without_legs[2], label="Random Forest_no legs")
+    end_fig("corr_effect", 0)
+    plt.show()
+
+
 if __name__ == "__main__":
     from threading import Thread
 
@@ -439,78 +589,4 @@ if __name__ == "__main__":
 
     # qt5 warnings clutter up the output
     suppress_qt_warnings()
-
-    # Retrieve the data from the csv files and preprocess them
-    train, test = load_data(corr_threshold=0.95)
-
-    acc=svm_func(*train,*test)
-    print(f"Accuracy SVM: {acc:.5f}")
-    
-    #exit()
-    # Define input and output parameters
-    k_range = range(5, 25)
-    knn_ret, tree_ret, forest_ret = (
-        ([[0 for _ in k_range] for _ in range(2)], []),
-        ([], [], [], []),
-        ([], [], [], []),
-    )
-    knn_parameters, tree_parameters, forest_parameters = (
-        [k_range],  # k
-        [range(1, 30), range(2, 30), range(1, 30)],  # depth, split, leaf
-        [range(1, 50), range(2, 50), range(1, 50)],  # depth, split, est
-    )
-    t = lambda f, ret, param: Thread(target=f, args=(*train, *test, *ret, *param))
-    # Start the threads, one for each algorithm
-    start_and_wait(
-        [
-     #       t(svm_func,svm_ret,svm_parameters),
-            t(knn_parameter_sweep, knn_ret, knn_parameters),
-            t(tree_parameter_sweep, tree_ret, tree_parameters),
-            t(random_forest_parameter_sweep, forest_ret, forest_parameters),
-        ]
-    )
-    image_folder = "./images"
-
-    # Plot the results
-    def fig(name):
-        plt.figure(name)
-        plt.title(name)
-        plt.ylabel("accuracy")
-
-    def end_fig(name):
-        plt.legend()
-        plt.savefig(image_folder + f"/{name}_{NUM_SAMPLES}.png")
-
-    fig("KNN parameter sweep")
-    plt.xlabel("k")
-    for i, score in enumerate(knn_ret[0]):
-        plt.plot(k_range, score, label=["euclidean", "manhattan"][i])
-    end_fig("knn")
-
-    fig("Decision Tree parameter sweep")
-    strip = lambda x: [i[0] for i in x]
-    for i in range(len(tree_parameters)):
-        plt.plot(
-            tree_parameters[i], strip(tree_ret[i]), label=["depth", "split", "leaf"][i]
-        )
-    end_fig("tree")
-
-    fig("Random Forest parameter sweep")
-    for i in range(len(forest_parameters)):
-        plt.plot(
-            forest_parameters[i],
-            forest_ret[i],
-            label=["depth", "split", "est"][i],
-        )
-    end_fig("forest")
-    plt.show()
-
-    # Write the results to a file
-    env = Environment(loader=FileSystemLoader("."))
-    template = env.get_template("result_template.md.jinja")
-    template.stream(
-        tree_ret=tree_ret,
-        knn_ret=knn_ret,
-        forest_ret=forest_ret,
-    ).dump("results.md")
-    print("Done")
+    corr_test()

@@ -371,7 +371,6 @@ def remove_correlated(df: pandas.DataFrame, corr_threshold=0.95, show_heatmap=Tr
 
     plt.show()
     reduced_shape = df.shape
-    print(f"{original_shape=} {reduced_shape=}")
     return to_remove, df
 
 
@@ -404,13 +403,64 @@ def pack(data: pandas.DataFrame) -> list[Gesture]:
     return gestures
 
 
-def preprocess(csv: str, drop="gesture label", to_drop=None, corr_threshold=0.95):
+def preprocess_decorator(func):
+    import time
+
+    def wrapper(*args, **kwargs):
+        if "drop_below_spine" in kwargs:
+            drop_below_spine = kwargs["drop_below_spine"]
+            if not drop_below_spine:
+                return func(*args, **kwargs)
+            else:
+                ret = func(*args, **kwargs)
+        else:
+            return func(*args, **kwargs)
+        if type(ret) == tuple:
+            df = ret[1]
+        else:
+            df = ret
+        spine_index = joints.index("Spine")
+        for col in df.columns:
+            for joint in joints[spine_index + 1 :]:
+                if joint in col:
+                    df.drop(col, axis=1, inplace=True)
+                    break
+        if type(ret) == tuple:
+            return ret[0], df
+        else:
+            return df
+
+    def printer(*args, **kwargs):
+        print("-" * 20)
+        print(f"Preprocessing {args[0]}")
+        t1 = time.time()
+        ret = wrapper(*args, **kwargs)
+        t2 = time.time()
+        print(f"{args[0]} preprocessed in {t2-t1} seconds")
+        if type(ret) == tuple:
+            df = ret[1]
+        else:
+            df = ret
+        print(f"Shape of {args[0]}: {df.shape}")
+        print("-" * 20)
+        return ret
+
+    return printer
+
+
+@preprocess_decorator
+def preprocess(
+    csv: str,
+    drop="gesture label",
+    to_drop=None,
+    corr_threshold=0.95,
+    drop_below_spine=True,
+):
     """
     Preprocess the data by rotating each skeleton to the same rotation
     and moving the skeleton to the origin (relative to the center of the body).
     Also removes all columns that have at least corr_threshold correlation with another column
     """
-    print(f"Preprocessing {csv}")
     df = pandas.read_csv(csv)
     if drop in df.columns:
         df = df.drop(drop, axis=1)
@@ -424,6 +474,7 @@ def preprocess(csv: str, drop="gesture label", to_drop=None, corr_threshold=0.95
     else:
         df.drop(to_drop, axis=1, inplace=True)
         return df
+    print(f"{csv} has final shape {df.shape}")
     return dropped, df
 
 
