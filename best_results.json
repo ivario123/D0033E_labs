@@ -1,0 +1,1 @@
+{"knn": {"acc": 0.6685185185185185, "corr": 0.54, "params": {"metric": "manhattan", "k": 5}, "legs": true}, "tree": {"acc": 0.6277777777777778, "corr": 0.54, "params": {"depth": 29, "split": 2, "leaf": 1}, "legs": false}, "forest": {"acc": 0.8574074074074074, "corr": 0.54, "params": {"depth": 42, "split": 5, "est": 44}, "legs": true}}
