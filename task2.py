@@ -1,21 +1,15 @@
 from threading import Thread
 from typing import Any, Callable, List, Tuple
-import numpy as np
-from pandas import DataFrame as df
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import NuSVC
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import classification_report
-from knn import EUCLIDEAN
 from sk_tree import DecisionTreeClassifier
 from task1 import preprocess
 import time
-from sklearn import svm
 
-NUM_SAMPLES = 1
+NUM_SAMPLES = 5
 IMAGE_FOLDER = "./images"
 OKGREEN = "\033[92m"
 ENDC = "\033[0m"
@@ -173,19 +167,7 @@ def svm_parameter_sweep(
     best.append(top)
     print(f"{top=}")
 
-
-#  gamma_scores.extend([compute(train_X, train_y, test_X, test_y,gamma=g) for g in gamma])
-#  kernel_scores.extend([compute(train_X, train_y, test_X, test_y,kernel=k) for k in kernels])
-# scores.extend([svm_func(train_X,train_y,test_X,train_y,i) for i in c_range])
-#  golf=np.amax(gamma_scores)
-#  golf2=np.amax(kernel_scores)
-#  best.append((({"gamma": gamma[gamma_scores.index(golf)]},golf),({"kernel": kernels[kernel_scores.index(golf2)]},golf2)))
-
-# best.append(({"gamma": c_range[gamma_scores.index(golf)]},golf))
-# Starta en del av rangen i en tråd, en i en annan
-
-
-def knn(train_X, train_y, test_X, test_y, n_neighbors=5, distance_measure=EUCLIDEAN):
+def knn(train_X, train_y, test_X, test_y, n_neighbors=5, distance_measure=None):
     knn = KNeighborsClassifier(n_neighbors=n_neighbors, metric=distance_measure)
     knn.fit(train_X, train_y)
     knn_pred = knn.predict(test_X)
@@ -467,7 +449,7 @@ def random_forest_parameter_sweep(
 
 
 @info
-def corr_test(corr_range: range = range(60, 100, 2)):
+def corr_test(corr_range: range = range(94, 100, 2)):
     # Helper functions
 
     def fig(name):
@@ -528,7 +510,7 @@ def corr_test(corr_range: range = range(60, 100, 2)):
     )
     _, tree_parameters, forest_parameters, svm_parameters = params
 
-    for drop_below_spine in [False, False]:
+    for drop_below_spine in [True, False]:
         for corr in corr_range:
             print("\n" * 5)
             print(f"{OKGREEN}Correlation threshold: {corr}%{ENDC}")
@@ -596,7 +578,7 @@ def corr_test(corr_range: range = range(60, 100, 2)):
             end_fig(func_names[2], corr, drop_below_spine)
             # plt.close("all")
             tmp = svm_ret[0][0]
-            lin,pol,rbf = [
+            lin, pol, rbf = [
                 tmp["linear"],
                 tmp["poly"],
                 tmp["rbf"],
