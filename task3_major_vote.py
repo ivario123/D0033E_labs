@@ -9,6 +9,7 @@ from task1 import preprocess
 
 if __name__ == "__main__":
     # Define classifiers
+    # chosen the optimal parameters from task 2
     clf1 = DecisionTreeClassifier(max_depth=29,min_samples_split=2,min_samples_leaf=1)
     clf2 = KNeighborsClassifier(n_neighbors=5, metric='manhattan')
     clf3 = MLPClassifier(hidden_layer_sizes=28, activation='tanh',solver='lbfgs',learning_rate='constant',random_state=1)
